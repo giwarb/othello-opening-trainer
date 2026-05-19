@@ -1,0 +1,17 @@
+{
+  "name": "Othello Opening Trainer",
+  "short_name": "Othello Trainer",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f5f2e8",
+  "theme_color": "#17412f",
+  "description": "Practice named Othello openings from a curated opening-book dataset.",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

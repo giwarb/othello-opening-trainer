@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-server.log
+artifacts-*.png
+visual-check.cjs
+othello_openings.json
+!src/data/othello_openings.json
+*.html
+!index.html
