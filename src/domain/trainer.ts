@@ -31,9 +31,8 @@ const rootTree = createOpeningTree(openings);
 export function startTrainer(
   playerSide: PlayerSide,
   mode: TrainerMode,
-  rng: Rng = Math.random,
 ): TrainerState {
-  const state: TrainerState = {
+  return {
     board: initialBoard(),
     moves: [],
     playerSide,
@@ -42,13 +41,11 @@ export function startTrainer(
     message: "開始",
     currentOpenings: [],
   };
-  return maybeComputerMove(state, rng);
 }
 
 export function playPlayerMove(
   state: TrainerState,
   move: string,
-  rng: Rng = Math.random,
 ): TrainerState {
   if (state.status !== "playing") {
     return state;
@@ -63,8 +60,29 @@ export function playPlayerMove(
     return { ...state, status: "failure", message: validation.message };
   }
 
-  const next = applyKnownMove(state, normalized);
-  return maybeComputerMove(checkTerminal(next), rng);
+  return checkTerminal(applyKnownMove(state, normalized));
+}
+
+export function playComputerMove(
+  state: TrainerState,
+  rng: Rng = Math.random,
+): TrainerState {
+  if (state.status !== "playing") {
+    return state;
+  }
+  if (colorForPly(state.moves.length) === state.playerSide) {
+    return state;
+  }
+  const options = expectedMoves(state);
+  if (options.length === 0) {
+    return {
+      ...state,
+      status: "success",
+      message: "定石の終端まで到達しました",
+    };
+  }
+  const choice = options[Math.floor(rng() * options.length)] ?? options[0];
+  return checkTerminal(applyKnownMove(state, choice));
 }
 
 export function expectedMoves(state: TrainerState): string[] {
@@ -80,26 +98,6 @@ export function currentFreeOpenings(state: TrainerState): OpeningRecord[] {
   const tree = state.mode.kind === "free" ? state.mode.tree : rootTree;
   const node = findNode(tree, state.moves);
   return node?.terminalOpenings ?? [];
-}
-
-function maybeComputerMove(state: TrainerState, rng: Rng): TrainerState {
-  if (state.status !== "playing") {
-    return state;
-  }
-  if (colorForPly(state.moves.length) === state.playerSide) {
-    return checkTerminal(state);
-  }
-
-  const options = expectedMoves(state);
-  if (options.length === 0) {
-    return {
-      ...state,
-      status: "success",
-      message: "定石の終端まで到達しました",
-    };
-  }
-  const choice = options[Math.floor(rng() * options.length)] ?? options[0];
-  return maybeComputerMove(checkTerminal(applyKnownMove(state, choice)), rng);
 }
 
 function applyKnownMove(state: TrainerState, move: string): TrainerState {

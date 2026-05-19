@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createOpeningTree, openings } from "./openings";
 import {
   expectedMoves,
+  playComputerMove,
   playPlayerMove,
   startTrainer,
   type TrainerMode,
@@ -17,14 +18,15 @@ if (!tiger) {
 }
 
 describe("trainer", () => {
-  it("lets the computer play when player chooses white", () => {
-    const state = startTrainer(
-      "white",
-      { kind: "fixed", opening: tiger },
-      () => 0,
-    );
-    expect(state.moves).toEqual(["f5"]);
-    expect(expectedMoves(state)).toEqual(["d6"]);
+  it("normalizes openings so the first move is f5", () => {
+    expect(openings.every((opening) => opening.moves[0] === "f5")).toBe(true);
+  });
+
+  it("can play a computer move when player chooses white", () => {
+    const state = startTrainer("white", { kind: "fixed", opening: tiger });
+    const next = playComputerMove(state, () => 0);
+    expect(next.moves).toEqual(["f5"]);
+    expect(expectedMoves(next)).toEqual(["d6"]);
   });
 
   it("fails when fixed-mode player leaves the selected opening", () => {
@@ -35,14 +37,12 @@ describe("trainer", () => {
   });
 
   it("succeeds when the fixed opening reaches its terminal move", () => {
-    let state = startTrainer(
-      "black",
-      { kind: "fixed", opening: tiger },
-      () => 0,
-    );
-    state = playPlayerMove(state, "f5", () => 0);
-    state = playPlayerMove(state, "c3", () => 0);
-    state = playPlayerMove(state, "c4", () => 0);
+    let state = startTrainer("black", { kind: "fixed", opening: tiger });
+    state = playPlayerMove(state, "f5");
+    state = playComputerMove(state, () => 0);
+    state = playPlayerMove(state, "c3");
+    state = playComputerMove(state, () => 0);
+    state = playPlayerMove(state, "c4");
     expect(state.status).toBe("success");
   });
 
@@ -50,9 +50,8 @@ describe("trainer", () => {
     const tree = createOpeningTree(openings);
     const mode: TrainerMode = { kind: "free", tree };
     const state = startTrainer("black", mode);
-    const next = playPlayerMove(state, "f5", () => 0);
+    const next = playPlayerMove(state, "f5");
     expect(next.status).toBe("playing");
-    expect(next.moves.length).toBe(2);
-    expect(next.currentOpenings[0]?.primary_name).toBe("Perpendicular Opening");
+    expect(next.moves).toEqual(["f5"]);
   });
 });

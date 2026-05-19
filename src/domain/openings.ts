@@ -1,4 +1,5 @@
 import openingBook from "../data/othello_openings.json";
+import { coordToPoint, pointToCoord } from "./othello";
 
 export type OpeningRecord = {
   id: string;
@@ -20,12 +21,22 @@ export type OpeningBook = {
   openings: OpeningRecord[];
 };
 
+type Transform = (row: number, col: number) => { row: number; col: number };
+
+const transforms: Transform[] = [
+  (row, col) => ({ row, col }),
+  (row, col) => ({ row: col, col: 7 - row }),
+  (row, col) => ({ row: 7 - row, col: 7 - col }),
+  (row, col) => ({ row: 7 - col, col: row }),
+  (row, col) => ({ row, col: 7 - col }),
+  (row, col) => ({ row: 7 - row, col }),
+  (row, col) => ({ row: col, col: row }),
+  (row, col) => ({ row: 7 - col, col: 7 - row }),
+];
+
 export const openings = (openingBook as OpeningBook).openings
   .filter((opening) => opening.moves.length >= 2)
-  .map((opening) => ({
-    ...opening,
-    moves: opening.moves.map((move) => move.toLowerCase()),
-  }));
+  .map((opening) => normalizeOpeningToF5(opening));
 
 export type OpeningNode = {
   move?: string;
@@ -84,15 +95,6 @@ export function findNode(
   return node;
 }
 
-export function displayName(opening: OpeningRecord): string {
-  const names = [
-    opening.primary_name,
-    ...opening.japanese_names.filter((name) => name !== opening.primary_name),
-    ...opening.aliases,
-  ];
-  return names.slice(0, 2).join(" / ");
-}
-
 const japaneseNameMap: Record<string, string> = {
   "Diagonal Opening": "斜め取り",
   "Perpendicular Opening": "縦取り",
@@ -114,6 +116,15 @@ const japaneseNameMap: Record<string, string> = {
   "Wing Variation": "ウィング",
   "Semi-Wing Variation": "セミウィング",
 };
+
+export function displayName(opening: OpeningRecord): string {
+  const names = [
+    japaneseName(opening),
+    opening.primary_name,
+    ...opening.aliases,
+  ].filter(Boolean);
+  return [...new Set(names)].slice(0, 2).join(" / ");
+}
 
 export function japaneseName(opening: OpeningRecord): string {
   const explicit = opening.japanese_names.find((name) =>
@@ -141,4 +152,39 @@ export function openingSearchText(opening: OpeningRecord): string {
   ]
     .join(" ")
     .toLowerCase();
+}
+
+function normalizeOpeningToF5(opening: OpeningRecord): OpeningRecord {
+  const sourceMoves = opening.moves.map((move) => move.toLowerCase());
+  const transform = transformForFirstMove(sourceMoves[0]);
+  const moves = sourceMoves.map((move) => transformCoord(move, transform));
+  return {
+    ...opening,
+    id: `${opening.id}-f5`,
+    sequence: moves
+      .map((move, index) => (index % 2 === 0 ? move.toUpperCase() : move))
+      .join(""),
+    moves,
+    move_count: moves.length,
+    tags: [...new Set([...opening.tags, "normalized_f5"])],
+    source_notes: [
+      ...opening.source_notes,
+      "Normalized by board symmetry so the first move is f5.",
+    ],
+  };
+}
+
+function transformForFirstMove(move: string): Transform {
+  for (const transform of transforms) {
+    if (transformCoord(move, transform) === "f5") {
+      return transform;
+    }
+  }
+  return transforms[0];
+}
+
+function transformCoord(move: string, transform: Transform): string {
+  const { row, col } = coordToPoint(move);
+  const point = transform(row, col);
+  return pointToCoord(point.row, point.col);
 }

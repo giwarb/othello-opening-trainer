@@ -6,7 +6,7 @@ import {
   Sparkles,
   Undo2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import {
@@ -17,14 +17,18 @@ import {
   openings,
 } from "./domain/openings";
 import {
+  applyMove,
   type Board,
+  type Cell,
   colorForPly,
   discCounts,
+  getFlips,
   legalMoves,
   pointToCoord,
 } from "./domain/othello";
 import {
   expectedMoves,
+  playComputerMove,
   playPlayerMove,
   rootTree,
   startTrainer,
@@ -35,6 +39,10 @@ import {
 type ModeChoice = "free" | string;
 type SideChoice = "black" | "white";
 type Phase = "setup" | "practice";
+type AnimatingCells = { placed: Set<string>; flipped: Set<string> };
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const curatedOpenings = openings
   .filter((opening) => opening.move_count >= 4)
@@ -51,7 +59,12 @@ function App() {
   const [query, setQuery] = useState("");
   const [state, setState] = useState<TrainerState | null>(null);
   const [history, setHistory] = useState<TrainerState[]>([]);
-  const [changedCells, setChangedCells] = useState<Set<string>>(new Set());
+  const [animatingCells, setAnimatingCells] = useState<AnimatingCells>({
+    placed: new Set(),
+    flipped: new Set(),
+  });
+  const [isAnimating, setIsAnimating] = useState(false);
+  const stateRef = useRef<TrainerState | null>(null);
 
   const selectedOpening = curatedOpenings.find(
     (opening) => opening.id === modeChoice,
@@ -70,38 +83,53 @@ function App() {
     return list.slice(0, 180);
   }, [query]);
 
-  function beginPractice() {
-    const next = startTrainer(side, mode, Math.random);
-    setState(next);
+  async function beginPractice() {
+    const next = startTrainer(side, mode);
+    commitState(next);
     setHistory([]);
-    setChangedCells(diffBoards(null, next.board));
+    setAnimatingCells({ placed: new Set(), flipped: new Set() });
     setPhase("practice");
+    if (side === "white") {
+      await sleep(260);
+      await runComputerTurn(next);
+    }
   }
 
-  function restartSameSettings() {
-    const next = startTrainer(side, mode, Math.random);
-    setState(next);
+  async function restartSameSettings() {
+    const next = startTrainer(side, mode);
+    commitState(next);
     setHistory([]);
-    setChangedCells(diffBoards(null, next.board));
+    setAnimatingCells({ placed: new Set(), flipped: new Set() });
+    if (side === "white") {
+      await sleep(260);
+      await runComputerTurn(next);
+    }
   }
 
   function backToSetup() {
     setPhase("setup");
-    setState(null);
+    commitState(null);
     setHistory([]);
-    setChangedCells(new Set());
+    setAnimatingCells({ placed: new Set(), flipped: new Set() });
   }
 
-  function play(coord: string) {
-    setState((current) => {
-      if (!current) {
-        return current;
-      }
-      const next = playPlayerMove(current, coord, Math.random);
+  async function play(coord: string) {
+    const current = stateRef.current;
+    if (!current || isAnimating || current.status !== "playing") {
+      return;
+    }
+    if (!expectedMoves(current).includes(coord)) {
+      const failed = playPlayerMove(current, coord);
       setHistory((items) => [...items, current]);
-      setChangedCells(diffBoards(current.board, next.board));
-      return next;
-    });
+      commitState(failed);
+      return;
+    }
+    setHistory((items) => [...items, current]);
+    const next = await animateMove(current, coord, "player");
+    if (next.status === "playing") {
+      await sleep(240);
+      await runComputerTurn(next);
+    }
   }
 
   function undo() {
@@ -110,12 +138,71 @@ function App() {
       if (!previous) {
         return items;
       }
-      setChangedCells(
-        state ? diffBoards(state.board, previous.board) : new Set(),
-      );
-      setState(previous);
+      commitState(previous);
+      setAnimatingCells({ placed: new Set(), flipped: new Set() });
       return items.slice(0, -1);
     });
+  }
+
+  async function runComputerTurn(base: TrainerState) {
+    if (
+      base.status !== "playing" ||
+      colorForPly(base.moves.length) === base.playerSide
+    ) {
+      return;
+    }
+    const options = expectedMoves(base);
+    const move = options[Math.floor(Math.random() * options.length)];
+    if (!move) {
+      commitState(playComputerMove(base));
+      return;
+    }
+    await animateMove(base, move, "computer");
+  }
+
+  async function animateMove(
+    base: TrainerState,
+    move: string,
+    actor: "player" | "computer",
+  ): Promise<TrainerState> {
+    setIsAnimating(true);
+    const color = colorForPly(base.moves.length);
+    const flips = getFlips(base.board, move, color);
+    const placedBoard = boardWithCell(base.board, move, color);
+    commitState({
+      ...base,
+      board: placedBoard,
+      message:
+        actor === "player"
+          ? `${move} を置きました`
+          : `相手が ${move} に置きました`,
+    });
+    setAnimatingCells({ placed: new Set([move]), flipped: new Set() });
+    await sleep(280);
+
+    const finalState =
+      actor === "player"
+        ? playPlayerMove(base, move)
+        : playComputerMove(base, rngForMove(base, move));
+    const finalBoard =
+      finalState.status === "failure"
+        ? applyMove(base.board, move, color)
+        : finalState.board;
+    commitState({
+      ...finalState,
+      board: finalBoard,
+      message: actor === "player" ? `${move} を着手` : `相手が ${move} を着手`,
+    });
+    setAnimatingCells({ placed: new Set(), flipped: new Set(flips) });
+    await sleep(440);
+    setAnimatingCells({ placed: new Set(), flipped: new Set() });
+    setIsAnimating(false);
+    return stateRef.current ?? finalState;
+  }
+
+  function commitState(next: TrainerState | null) {
+    stateRef.current = next;
+    setState(next);
   }
 
   return (
@@ -135,8 +222,9 @@ function App() {
         />
       ) : state ? (
         <PracticeScreen
-          changedCells={changedCells}
+          animatingCells={animatingCells}
           historyLength={history.length}
+          isAnimating={isAnimating}
           selectedOpening={selectedOpening}
           state={state}
           onBackToSetup={backToSetup}
@@ -158,7 +246,7 @@ function Header() {
         </div>
         <div>
           <h1>オセロ定石トレーナー</h1>
-          <p>{openings.length} 本の定石データを収録</p>
+          <p>{openings.length} 本の定石データを初手 f5 に正規化</p>
         </div>
       </div>
     </section>
@@ -267,8 +355,9 @@ function SetupScreen({
 }
 
 function PracticeScreen({
-  changedCells,
+  animatingCells,
   historyLength,
+  isAnimating,
   selectedOpening,
   state,
   onBackToSetup,
@@ -276,8 +365,9 @@ function PracticeScreen({
   onRestart,
   onUndo,
 }: {
-  changedCells: Set<string>;
+  animatingCells: AnimatingCells;
   historyLength: number;
+  isAnimating: boolean;
   selectedOpening?: OpeningRecord;
   state: TrainerState;
   onBackToSetup: () => void;
@@ -293,10 +383,9 @@ function PracticeScreen({
         : "white"
       : null;
   const playableMoves =
-    nextColor === state.playerSide && state.status === "playing"
+    nextColor === state.playerSide && state.status === "playing" && !isAnimating
       ? new Set(legalMoves(state.board, state.playerSide))
       : new Set<string>();
-  const bookMoves = new Set(expectedMoves(state));
   const latestOpponentMove = [...state.moves]
     .map((move, index) => ({ move, index }))
     .reverse()
@@ -337,8 +426,7 @@ function PracticeScreen({
         </div>
 
         <BoardView
-          bookMoves={bookMoves}
-          changedCells={changedCells}
+          animatingCells={animatingCells}
           playableMoves={playableMoves}
           state={state}
           onPlay={onPlay}
@@ -405,19 +493,12 @@ function PracticeScreen({
           }
         />
         <InfoBlock
-          title="次の定石手"
-          value={expectedMoves(state).join(", ") || "なし"}
-        />
-        <InfoBlock
           title="相手の直前手"
           value={
             latestOpponentMove ? latestOpponentMove.move : "まだありません"
           }
         />
-        <div>
-          <h3 className="mini-title">相手盤</h3>
-          <MiniBoard board={state.board} />
-        </div>
+        <InfoBlock title="手数" value={`${state.moves.length}`} />
         <div className="terminal-list">
           <h3>到達した定石</h3>
           {reachedOpenings.length > 0 ? (
@@ -438,14 +519,12 @@ function PracticeScreen({
 function BoardView({
   state,
   playableMoves,
-  bookMoves,
-  changedCells,
+  animatingCells,
   onPlay,
 }: {
   state: TrainerState;
   playableMoves: Set<string>;
-  bookMoves: Set<string>;
-  changedCells: Set<string>;
+  animatingCells: AnimatingCells;
   onPlay: (coord: string) => void;
 }) {
   return (
@@ -455,12 +534,12 @@ function BoardView({
           row.map((cell, colIndex) => {
             const coord = pointToCoord(rowIndex, colIndex);
             const canPlay = playableMoves.has(coord);
-            const isBook = bookMoves.has(coord);
-            const changed = changedCells.has(coord);
+            const placed = animatingCells.placed.has(coord);
+            const flipped = animatingCells.flipped.has(coord);
             return (
               <button
                 aria-label={coord}
-                className={`square ${canPlay ? "playable" : ""} ${isBook ? "book" : ""}`}
+                className={`square ${canPlay ? "playable" : ""}`}
                 disabled={!canPlay || state.status !== "playing"}
                 key={coord}
                 type="button"
@@ -469,30 +548,15 @@ function BoardView({
                 <span className="coord">{coord}</span>
                 {cell ? (
                   <span
-                    className={`stone ${cell} ${changed ? "flipped" : ""}`}
-                    key={`${coord}-${cell}-${changed ? state.moves.length : 0}`}
+                    className={`stone ${cell} ${placed ? "placed" : ""} ${flipped ? "flipped" : ""}`}
+                    key={`${coord}-${cell}-${placed ? "p" : ""}-${flipped ? "f" : ""}-${state.moves.length}`}
                   />
                 ) : null}
-                {!cell && canPlay ? <span className="hint" /> : null}
               </button>
             );
           }),
         )}
       </div>
-    </div>
-  );
-}
-
-function MiniBoard({ board }: { board: Board }) {
-  return (
-    <div className="mini-board">
-      {board.map((row, rowIndex) =>
-        row.map((cell, colIndex) => (
-          <span key={pointToCoord(rowIndex, colIndex)}>
-            {cell ? <i className={cell} /> : null}
-          </span>
-        )),
-      )}
     </div>
   );
 }
@@ -516,16 +580,19 @@ function statusLabel(state: TrainerState): string {
   return state.moves.length % 2 === 0 ? "黒番" : "白番";
 }
 
-function diffBoards(previous: Board | null, next: Board): Set<string> {
-  const changed = new Set<string>();
-  for (let row = 0; row < 8; row += 1) {
-    for (let col = 0; col < 8; col += 1) {
-      if (!previous || previous[row][col] !== next[row][col]) {
-        changed.add(pointToCoord(row, col));
-      }
-    }
-  }
-  return changed;
+function boardWithCell(board: Board, move: string, cell: Cell): Board {
+  const next = board.map((row) => [...row]);
+  const [file, rankText] = [move[0], move.slice(1)];
+  const col = "abcdefgh".indexOf(file);
+  const row = Number(rankText) - 1;
+  next[row][col] = cell;
+  return next;
+}
+
+function rngForMove(state: TrainerState, move: string): () => number {
+  const options = expectedMoves(state);
+  const index = Math.max(0, options.indexOf(move));
+  return () => (index + 0.01) / Math.max(1, options.length);
 }
 
 const root = document.getElementById("root");
