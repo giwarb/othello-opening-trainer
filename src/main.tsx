@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowLeft,
   Play,
   RotateCcw,
@@ -29,8 +29,8 @@ import {
 } from "./domain/othello";
 import {
   chooseComputerMove,
-  expectedMoves,
   playComputerMove,
+  playKnownComputerMove,
   playPlayerMove,
   rootTree,
   startTrainer,
@@ -119,12 +119,6 @@ function App() {
     if (!current || isAnimating || current.status !== "playing") {
       return;
     }
-    if (!expectedMoves(current).includes(coord)) {
-      const failed = playPlayerMove(current, coord);
-      setHistory((items) => [...items, current]);
-      commitState(failed);
-      return;
-    }
     setHistory((items) => [...items, current]);
     const next = await animateMove(current, coord, "player");
     if (next.status === "playing") {
@@ -185,7 +179,7 @@ function App() {
     const finalState =
       actor === "player"
         ? playPlayerMove(base, move)
-        : playComputerMove(base, rngForMove(base, move));
+        : playKnownComputerMove(base, move);
     const finalBoard =
       finalState.status === "failure"
         ? applyMove(base.board, move, color)
@@ -390,9 +384,9 @@ function PracticeScreen({
   const playableMoves =
     nextColor === state.playerSide && state.status === "playing" && !isAnimating
       ? new Set(
-          legalMoves(state.board, state.playerSide).filter((move) =>
-            expectedMoves(state).includes(move),
-          ),
+          state.moves.length === 0
+            ? ["f5"]
+            : legalMoves(state.board, state.playerSide),
         )
       : new Set<string>();
   const latestOpponentMove = [...state.moves]
@@ -606,11 +600,6 @@ function boardWithCell(board: Board, move: string, cell: Cell): Board {
   return next;
 }
 
-function rngForMove(state: TrainerState, move: string): () => number {
-  const options = expectedMoves(state);
-  const index = Math.max(0, options.indexOf(move));
-  return () => (index + 0.01) / Math.max(1, options.length);
-}
 
 const root = document.getElementById("root");
 

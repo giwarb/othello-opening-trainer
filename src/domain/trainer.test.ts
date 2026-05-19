@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   createOpeningTree,
   type OpeningRecord,
@@ -45,7 +45,7 @@ describe("trainer", () => {
     const state = startTrainer("black", { kind: "fixed", opening: tiger });
     const failed = playPlayerMove(state, "c4");
     expect(failed.status).toBe("failure");
-    expect(failed.message).toContain("違う手");
+    expect(failed.message).toContain("f5");
   });
 
   it("succeeds when the fixed opening reaches its terminal move", () => {

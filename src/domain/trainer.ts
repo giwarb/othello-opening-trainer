@@ -1,11 +1,11 @@
-import {
+﻿import {
   createOpeningTree,
   findNode,
   type OpeningNode,
   type OpeningRecord,
   openings,
 } from "./openings";
-import { applyMove, type Board, colorForPly, initialBoard } from "./othello";
+import { applyMove, type Board, colorForPly, initialBoard, legalMoves } from "./othello";
 
 export type PlayerSide = "black" | "white";
 export type TrainerMode =
@@ -73,15 +73,12 @@ export function playComputerMove(
   if (colorForPly(state.moves.length) === state.playerSide) {
     return state;
   }
-  const options = expectedMoves(state);
-  if (options.length === 0) {
-    return {
-      ...state,
-      status: "success",
-      message: "定石の終端まで到達しました",
-    };
+  let choice: string;
+  try {
+    choice = chooseComputerMove(state, rng);
+  } catch {
+    return { ...state, status: "success", message: "合法手がありません" };
   }
-  const choice = chooseComputerMove(state, rng);
   return checkTerminal(applyKnownMove(state, choice));
 }
 
@@ -98,9 +95,15 @@ export function chooseComputerMove(
   state: TrainerState,
   rng: Rng = Math.random,
 ): string {
-  const options = expectedMoves(state);
+  const color = colorForPly(state.moves.length);
+  const allLegal = legalMoves(state.board, color);
+  if (allLegal.length === 0) {
+    throw new Error("No legal move is available");
+  }
+
+  const options = expectedMoves(state).filter((m) => allLegal.includes(m));
   if (options.length === 0) {
-    throw new Error("No computer move is available");
+    return allLegal[Math.floor(rng() * allLegal.length)];
   }
   if (state.mode.kind === "fixed") {
     return options[0];
@@ -108,7 +111,7 @@ export function chooseComputerMove(
 
   const node = findNode(state.mode.tree, state.moves);
   if (!node) {
-    return options[0];
+    return allLegal[Math.floor(rng() * allLegal.length)];
   }
 
   const ranked = options.map((move) => {
@@ -123,6 +126,13 @@ export function chooseComputerMove(
   const maxLength = Math.max(...ranked.map((item) => item.longest));
   const best = ranked.filter((item) => item.longest === maxLength);
   return best[Math.floor(rng() * best.length)]?.move ?? best[0].move;
+}
+
+export function playKnownComputerMove(
+  state: TrainerState,
+  move: string,
+): TrainerState {
+  return checkTerminal(applyKnownMove(state, move));
 }
 
 export function currentFreeOpenings(state: TrainerState): OpeningRecord[] {
@@ -159,15 +169,8 @@ function validateMove(
   state: TrainerState,
   move: string,
 ): { ok: true } | { ok: false; message: string } {
-  const options = expectedMoves(state);
-  if (!options.includes(move)) {
-    return {
-      ok: false,
-      message:
-        state.mode.kind === "fixed"
-          ? "選んだ定石と違う手です"
-          : "収録定石にない手です",
-    };
+  if (state.moves.length === 0 && move !== "f5") {
+    return { ok: false, message: "1手目は f5 のみです" };
   }
   return { ok: true };
 }
@@ -185,7 +188,7 @@ function checkTerminal(state: TrainerState): TrainerState {
 
   const node = findNode(state.mode.tree, state.moves);
   if (!node) {
-    return { ...state, status: "failure", message: "収録定石から外れました" };
+    return state;
   }
   if (node.children.size === 0 && node.terminalOpenings.length > 0) {
     return { ...state, status: "success", message: "展開先のない終端です" };
