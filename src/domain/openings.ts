@@ -93,9 +93,47 @@ export function displayName(opening: OpeningRecord): string {
   return names.slice(0, 2).join(" / ");
 }
 
+const japaneseNameMap: Record<string, string> = {
+  "Diagonal Opening": "斜め取り",
+  "Perpendicular Opening": "縦取り",
+  "Parallel Opening": "並び取り",
+  Tiger: "虎",
+  Cat: "猫",
+  "No-Cat": "ノーカン",
+  NoCat: "ノーカン",
+  Cow: "牛",
+  Buffalo: "バッファロー",
+  Horse: "馬",
+  Italian: "イタリアン",
+  Ganglion: "ギャングリオン",
+  Swallow: "燕",
+  Heath: "飛び出し",
+  Snake: "蛇",
+  "Raccoon Dog": "狸",
+  "X-square Opening": "X打ち",
+  "Wing Variation": "ウィング",
+  "Semi-Wing Variation": "セミウィング",
+};
+
+export function japaneseName(opening: OpeningRecord): string {
+  const explicit = opening.japanese_names.find((name) =>
+    [...name].some((char) => char.charCodeAt(0) > 127),
+  );
+  if (explicit) {
+    return explicit;
+  }
+  return japaneseNameMap[opening.primary_name] ?? opening.primary_name;
+}
+
+export function josekiLabel(opening: OpeningRecord): string {
+  const name = japaneseName(opening);
+  return name.endsWith("定石") ? name : `${name}定石`;
+}
+
 export function openingSearchText(opening: OpeningRecord): string {
   return [
     opening.primary_name,
+    japaneseName(opening),
     ...opening.aliases,
     ...opening.japanese_names,
     opening.sequence,

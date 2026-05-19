@@ -3,6 +3,7 @@ dist/
 dev-server.log
 artifacts-*.png
 visual-check.cjs
+visual-*.cjs
 othello_openings.json
 !src/data/othello_openings.json
 *.html

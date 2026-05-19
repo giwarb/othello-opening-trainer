@@ -136,7 +136,7 @@ function validateMove(
       ok: false,
       message:
         state.mode.kind === "fixed"
-          ? "選択した定石と違う手です"
+          ? "選んだ定石と違う手です"
           : "収録定石にない手です",
     };
   }
