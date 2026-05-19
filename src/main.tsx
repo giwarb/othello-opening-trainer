@@ -10,11 +10,12 @@ import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import {
-  japaneseName,
   josekiLabel,
   type OpeningRecord,
+  openingAdvantageScore,
   openingSearchText,
   openings,
+  sortOpeningsForSide,
 } from "./domain/openings";
 import {
   applyMove,
@@ -45,13 +46,7 @@ type AnimatingCells = { placed: Set<string>; flipped: Set<string> };
 const sleep = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
 
-const curatedOpenings = openings
-  .filter((opening) => opening.move_count >= 4)
-  .sort(
-    (a, b) =>
-      a.move_count - b.move_count ||
-      japaneseName(a).localeCompare(japaneseName(b), "ja"),
-  );
+const curatedOpenings = openings.filter((opening) => opening.move_count >= 4);
 
 function App() {
   const [phase, setPhase] = useState<Phase>("setup");
@@ -67,6 +62,11 @@ function App() {
   const [isAnimating, setIsAnimating] = useState(false);
   const stateRef = useRef<TrainerState | null>(null);
 
+  const sortedOpenings = useMemo(
+    () => sortOpeningsForSide(curatedOpenings, side),
+    [side],
+  );
+
   const selectedOpening = curatedOpenings.find(
     (opening) => opening.id === modeChoice,
   );
@@ -77,12 +77,12 @@ function App() {
   const filteredOpenings = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const list = needle
-      ? curatedOpenings.filter((opening) =>
+      ? sortedOpenings.filter((opening) =>
           openingSearchText(opening).includes(needle),
         )
-      : curatedOpenings;
+      : sortedOpenings;
     return list.slice(0, 180);
-  }, [query]);
+  }, [query, sortedOpenings]);
 
   async function beginPractice() {
     const next = startTrainer(side, mode);
@@ -333,7 +333,10 @@ function SetupScreen({
                 onClick={() => onModeChange(opening.id)}
               >
                 <strong>{josekiLabel(opening)}</strong>
-                <span>{opening.sequence}</span>
+                <span>
+                  {opening.sequence}
+                  {formatOpeningScore(opening)}
+                </span>
               </button>
             ))}
           </div>
@@ -574,6 +577,14 @@ function InfoBlock({ title, value }: { title: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatOpeningScore(opening: OpeningRecord): string {
+  const score = openingAdvantageScore(opening);
+  if (score === null || score === 0) {
+    return "";
+  }
+  return score > 0 ? ` / 黒+${score}` : ` / 白+${Math.abs(score)}`;
 }
 
 function statusLabel(state: TrainerState): string {

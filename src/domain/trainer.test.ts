@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createOpeningTree, openings } from "./openings";
+import {
+  createOpeningTree,
+  type OpeningRecord,
+  openings,
+  sortOpeningsForSide,
+} from "./openings";
 import {
   chooseComputerMove,
   expectedMoves,
@@ -74,9 +79,24 @@ describe("trainer", () => {
     const state = playPlayerMove(startTrainer("black", mode), "f5");
     expect(chooseComputerMove(state, () => 0)).toBe("f6");
   });
+
+  it("sorts rated openings toward the selected side", () => {
+    const black = makeOpening("black", ["f5", "d6"]);
+    black.source_notes = ["othlog evaluation: 黒+2"];
+    const white = makeOpening("white", ["f5", "f6"]);
+    white.source_notes = ["othlog evaluation: 白+2"];
+    const unknown = makeOpening("unknown", ["f5", "f4"]);
+
+    expect(sortOpeningsForSide([unknown, white, black], "black")[0].id).toBe(
+      "black",
+    );
+    expect(sortOpeningsForSide([unknown, white, black], "white")[0].id).toBe(
+      "white",
+    );
+  });
 });
 
-function makeOpening(id: string, moves: string[]) {
+function makeOpening(id: string, moves: string[]): OpeningRecord {
   return {
     id,
     primary_name: id,

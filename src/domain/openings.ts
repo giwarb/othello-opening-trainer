@@ -157,6 +157,44 @@ export function openingSearchText(opening: OpeningRecord): string {
     .toLowerCase();
 }
 
+export function openingAdvantageScore(opening: OpeningRecord): number | null {
+  const text = opening.source_notes.join(" ");
+  const matches = [...text.matchAll(/(黒|白|black|white)\+(\d+)/gi)];
+  if (matches.length === 0) {
+    return null;
+  }
+
+  return matches.reduce((score, match) => {
+    const side = match[1].toLowerCase();
+    const value = Number(match[2]);
+    return score + (side === "黒" || side === "black" ? value : -value);
+  }, 0);
+}
+
+export function sortOpeningsForSide(
+  records: OpeningRecord[],
+  side: "black" | "white",
+): OpeningRecord[] {
+  const direction = side === "black" ? 1 : -1;
+  return [...records].sort((a, b) => {
+    const aScore = openingAdvantageScore(a);
+    const bScore = openingAdvantageScore(b);
+    const aKnown = aScore !== null;
+    const bKnown = bScore !== null;
+
+    if (aKnown && bKnown && aScore !== bScore) {
+      return (bScore - aScore) * direction;
+    }
+    if (aKnown !== bKnown) {
+      return aKnown ? -1 : 1;
+    }
+    return (
+      b.move_count - a.move_count ||
+      japaneseName(a).localeCompare(japaneseName(b), "ja")
+    );
+  });
+}
+
 function normalizeOpeningToF5(opening: OpeningRecord): OpeningRecord {
   const sourceMoves = opening.moves.map((move) => move.toLowerCase());
   const transform = transformForFirstMove(sourceMoves[0]);
