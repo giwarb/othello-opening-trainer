@@ -81,7 +81,7 @@ export function playComputerMove(
       message: "定石の終端まで到達しました",
     };
   }
-  const choice = options[Math.floor(rng() * options.length)] ?? options[0];
+  const choice = chooseComputerMove(state, rng);
   return checkTerminal(applyKnownMove(state, choice));
 }
 
@@ -92,6 +92,37 @@ export function expectedMoves(state: TrainerState): string[] {
   }
   const node = findNode(state.mode.tree, state.moves);
   return node ? [...node.children.keys()] : [];
+}
+
+export function chooseComputerMove(
+  state: TrainerState,
+  rng: Rng = Math.random,
+): string {
+  const options = expectedMoves(state);
+  if (options.length === 0) {
+    throw new Error("No computer move is available");
+  }
+  if (state.mode.kind === "fixed") {
+    return options[0];
+  }
+
+  const node = findNode(state.mode.tree, state.moves);
+  if (!node) {
+    return options[0];
+  }
+
+  const ranked = options.map((move) => {
+    const child = node.children.get(move);
+    const longest = child
+      ? Math.max(
+          ...child.reachableOpenings.map((opening) => opening.move_count),
+        )
+      : 0;
+    return { move, longest };
+  });
+  const maxLength = Math.max(...ranked.map((item) => item.longest));
+  const best = ranked.filter((item) => item.longest === maxLength);
+  return best[Math.floor(rng() * best.length)]?.move ?? best[0].move;
 }
 
 export function currentFreeOpenings(state: TrainerState): OpeningRecord[] {

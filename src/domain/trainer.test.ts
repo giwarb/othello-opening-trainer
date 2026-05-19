@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createOpeningTree, openings } from "./openings";
 import {
+  chooseComputerMove,
   expectedMoves,
   playComputerMove,
   playPlayerMove,
@@ -60,4 +61,34 @@ describe("trainer", () => {
     expect(next.status).toBe("playing");
     expect(next.moves).toEqual(["f5"]);
   });
+
+  it("free mode computer prefers the move with the longest continuation", () => {
+    const records = [
+      makeOpening("short", ["f5", "d6", "c3"]),
+      makeOpening("long", ["f5", "f6", "d3", "f4", "e3"]),
+    ];
+    const mode: TrainerMode = {
+      kind: "free",
+      tree: createOpeningTree(records),
+    };
+    const state = playPlayerMove(startTrainer("black", mode), "f5");
+    expect(chooseComputerMove(state, () => 0)).toBe("f6");
+  });
 });
+
+function makeOpening(id: string, moves: string[]) {
+  return {
+    id,
+    primary_name: id,
+    aliases: [],
+    japanese_names: [],
+    sequence: moves.join(""),
+    moves,
+    move_count: moves.length,
+    family: "unknown" as const,
+    tags: [],
+    sources: [],
+    source_notes: [],
+    parent_id: null,
+  };
+}

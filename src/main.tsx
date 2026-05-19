@@ -27,6 +27,7 @@ import {
   pointToCoord,
 } from "./domain/othello";
 import {
+  chooseComputerMove,
   expectedMoves,
   playComputerMove,
   playPlayerMove,
@@ -151,9 +152,10 @@ function App() {
     ) {
       return;
     }
-    const options = expectedMoves(base);
-    const move = options[Math.floor(Math.random() * options.length)];
-    if (!move) {
+    let move: string;
+    try {
+      move = chooseComputerMove(base, Math.random);
+    } catch {
       commitState(playComputerMove(base));
       return;
     }
@@ -384,7 +386,11 @@ function PracticeScreen({
       : null;
   const playableMoves =
     nextColor === state.playerSide && state.status === "playing" && !isAnimating
-      ? new Set(legalMoves(state.board, state.playerSide))
+      ? new Set(
+          legalMoves(state.board, state.playerSide).filter((move) =>
+            expectedMoves(state).includes(move),
+          ),
+        )
       : new Set<string>();
   const latestOpponentMove = [...state.moves]
     .map((move, index) => ({ move, index }))
