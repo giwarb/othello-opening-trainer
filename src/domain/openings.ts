@@ -14,6 +14,7 @@ export type OpeningRecord = {
   sources: string[];
   source_notes: string[];
   parent_id: string | null;
+  duplicate_count?: number;
 };
 
 export type OpeningBook = {
@@ -34,9 +35,11 @@ const transforms: Transform[] = [
   (row, col) => ({ row: 7 - col, col: 7 - row }),
 ];
 
-export const openings = (openingBook as OpeningBook).openings
+const normalizedOpenings = (openingBook as OpeningBook).openings
   .filter((opening) => opening.moves.length >= 2)
   .map((opening) => normalizeOpeningToF5(opening));
+
+export const openings = dedupeOpenings(normalizedOpenings);
 
 export type OpeningNode = {
   move?: string;
@@ -172,6 +175,83 @@ function normalizeOpeningToF5(opening: OpeningRecord): OpeningRecord {
       "Normalized by board symmetry so the first move is f5.",
     ],
   };
+}
+
+function dedupeOpenings(records: OpeningRecord[]): OpeningRecord[] {
+  const bySequence = new Map<string, OpeningRecord>();
+
+  for (const record of records) {
+    const key = record.moves.join("");
+    const existing = bySequence.get(key);
+    if (!existing) {
+      bySequence.set(key, { ...record, duplicate_count: 1 });
+      continue;
+    }
+
+    bySequence.set(key, mergeOpening(existing, record));
+  }
+
+  return [...bySequence.values()];
+}
+
+function mergeOpening(
+  base: OpeningRecord,
+  incoming: OpeningRecord,
+): OpeningRecord {
+  const primary_name = choosePrimaryName(base, incoming);
+  const aliases = unique([
+    ...base.aliases,
+    ...incoming.aliases,
+    base.primary_name,
+    incoming.primary_name,
+  ]).filter((name) => name && name !== primary_name);
+
+  return {
+    ...base,
+    primary_name,
+    aliases,
+    japanese_names: unique([
+      ...base.japanese_names,
+      ...incoming.japanese_names,
+    ]),
+    sources: unique([...base.sources, ...incoming.sources]),
+    source_notes: unique([...base.source_notes, ...incoming.source_notes]),
+    tags: unique([
+      ...base.tags,
+      ...incoming.tags,
+      "deduped_by_normalized_sequence",
+    ]),
+    duplicate_count:
+      (base.duplicate_count ?? 1) + (incoming.duplicate_count ?? 1),
+  };
+}
+
+function choosePrimaryName(
+  base: OpeningRecord,
+  incoming: OpeningRecord,
+): string {
+  const baseJapanese = hasNonAsciiName(base.japanese_names);
+  const incomingJapanese = hasNonAsciiName(incoming.japanese_names);
+  if (incomingJapanese && !baseJapanese) {
+    return incoming.primary_name;
+  }
+  if (
+    base.primary_name.includes("Opening") &&
+    !incoming.primary_name.includes("Opening")
+  ) {
+    return incoming.primary_name;
+  }
+  return base.primary_name;
+}
+
+function hasNonAsciiName(names: string[]): boolean {
+  return names.some((name) =>
+    [...name].some((char) => char.charCodeAt(0) > 127),
+  );
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function transformForFirstMove(move: string): Transform {

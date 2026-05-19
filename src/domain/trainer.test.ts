@@ -22,6 +22,12 @@ describe("trainer", () => {
     expect(openings.every((opening) => opening.moves[0] === "f5")).toBe(true);
   });
 
+  it("deduplicates openings by normalized move sequence", () => {
+    const sequences = openings.map((opening) => opening.moves.join(""));
+    expect(new Set(sequences).size).toBe(openings.length);
+    expect(openings.length).toBeLessThan(623);
+  });
+
   it("can play a computer move when player chooses white", () => {
     const state = startTrainer("white", { kind: "fixed", opening: tiger });
     const next = playComputerMove(state, () => 0);
