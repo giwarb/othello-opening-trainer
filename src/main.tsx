@@ -619,6 +619,7 @@ function ResultScreen({
   const message = hadMistake
     ? "完走しましたが失敗がありました"
     : resultMessage(state.joseki);
+  const counts = discCounts(state.board);
 
   return (
     <div className="result-screen">
@@ -632,6 +633,37 @@ function ResultScreen({
             「最初からやり直す」でミスなしクリアを目指しましょう！
           </p>
         )}
+        <div className="result-details">
+          <section className="result-board-section" aria-label="最後の盤面">
+            <div className="result-section-head">
+              <span>最後の盤面</span>
+              <div className="score result-score">
+                <span className="disc black" />
+                {counts.black}
+                <span className="disc white" />
+                {counts.white}
+              </div>
+            </div>
+            <BoardView
+              animatingCells={{ placed: new Set(), flipped: new Set() }}
+              playableMoves={new Set()}
+              state={state}
+              onPlay={() => undefined}
+            />
+          </section>
+          <section className="result-explanation">
+            <span className="result-section-headline">この定石の狙い</span>
+            <p>{state.joseki.explanation.aim}</p>
+            <span className="result-section-headline">
+              この後に意識すること
+            </span>
+            <ul>
+              {state.joseki.explanation.followUp.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
         <div className="result-actions">
           <button
             className="primary-action result-again"
