@@ -16,6 +16,10 @@ describe("trainer", () => {
     expect(JOSEKI_LIST.every((j) => j.moves[0] === "f5")).toBe(true);
   });
 
+  it("all joseki have at least six moves", () => {
+    expect(JOSEKI_LIST.every((j) => j.moves.length >= 6)).toBe(true);
+  });
+
   it("starts in playing state", () => {
     const state = startTrainer(tori);
     expect(state.status).toBe("playing");
@@ -31,13 +35,15 @@ describe("trainer", () => {
   });
 
   it("player succeeds on correct joseki sequence (black side)", () => {
-    // nezumi: f5 f4 e3 (user=black plays f5, e3; computer plays f4)
     let state = startTrainer(nezumi);
-    state = playPlayerMove(state, "f5");
-    expect(state.status).toBe("playing");
-    state = playComputerMove(state);
-    expect(state.moves).toEqual(["f5", "f4"]);
-    state = playPlayerMove(state, "e3");
+    for (const move of nezumi.moves) {
+      if (state.status !== "playing") break;
+      if (state.moves.length % 2 === 0) {
+        state = playPlayerMove(state, move);
+      } else {
+        state = playComputerMove(state);
+      }
+    }
     expect(state.status).toBe("success");
   });
 
