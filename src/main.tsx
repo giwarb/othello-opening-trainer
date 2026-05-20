@@ -7,13 +7,7 @@
   Undo2,
   XCircle,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { JOSEKI_LIST, type Joseki } from "./data/joseki";
@@ -27,19 +21,18 @@ import {
   pointToCoord,
 } from "./domain/othello";
 import {
-  playComputerMove,
-  playPlayerMove,
-  startTrainer,
-  type TrainerState,
-} from "./domain/trainer";
-import {
   addRecord,
   buildStats,
   getRecords,
   type JosekiRecord,
   type JosekiStats,
-  todayString,
 } from "./domain/storage";
+import {
+  playComputerMove,
+  playPlayerMove,
+  startTrainer,
+  type TrainerState,
+} from "./domain/trainer";
 
 type Phase = "home" | "animating" | "practice" | "result";
 type AnimatingCells = { placed: Set<string>; flipped: Set<string> };
@@ -93,8 +86,8 @@ function App() {
       launchJoseki(pending[Math.floor(Math.random() * pending.length)]);
     } else {
       const sorted = [...JOSEKI_LIST].sort((a, b) => {
-        const ra = stats.get(a.id)!.successRate;
-        const rb = stats.get(b.id)!.successRate;
+        const ra = getJosekiStats(stats, a.id).successRate;
+        const rb = getJosekiStats(stats, b.id).successRate;
         const na = Number.isNaN(ra) ? -1 : ra;
         const nb = Number.isNaN(rb) ? -1 : rb;
         return na - nb;
@@ -104,7 +97,7 @@ function App() {
     }
   }
 
-  const handleAnimationDone = useCallback(async () => {
+  async function handleAnimationDone() {
     const joseki = selectedJoseki;
     if (!joseki) return;
     const initial = startTrainer(joseki);
@@ -117,8 +110,7 @@ function App() {
       await sleep(350);
       await driveComputerMoves(initial);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedJoseki]);
+  }
 
   async function driveComputerMoves(base: TrainerState): Promise<TrainerState> {
     let cur = base;
@@ -190,9 +182,7 @@ function App() {
     await sleep(280);
 
     const finalState =
-      actor === "player"
-        ? playPlayerMove(base, move)
-        : playComputerMove(base);
+      actor === "player" ? playPlayerMove(base, move) : playComputerMove(base);
 
     const msgOverride =
       actor === "player"
@@ -369,7 +359,7 @@ function JosekiGroup({
           <JosekiCard
             key={j.id}
             joseki={j}
-            stats={stats.get(j.id)!}
+            stats={getJosekiStats(stats, j.id)}
             onLaunch={onLaunch}
           />
         ))}
@@ -494,7 +484,9 @@ function PracticeScreen({
           ホームへ
         </button>
         <div className="practice-info">
-          <span className={`color-badge ${state.playerSide}`}>{colorLabel}</span>
+          <span className={`color-badge ${state.playerSide}`}>
+            {colorLabel}
+          </span>
           <strong>{state.joseki.name}</strong>
         </div>
         <button className="ghost-action" type="button" onClick={onRestart}>
@@ -624,7 +616,9 @@ function ResultScreen({
   onBackToHome: () => void;
   onPlayAgain: () => void;
 }) {
-  const message = hadMistake ? "完走しましたが失敗がありました" : resultMessage(state.joseki);
+  const message = hadMistake
+    ? "完走しましたが失敗がありました"
+    : resultMessage(state.joseki);
 
   return (
     <div className="result-screen">
@@ -647,11 +641,7 @@ function ResultScreen({
             <RefreshCw size={18} />
             最初からやり直す
           </button>
-          <button
-            className="ghost-action"
-            type="button"
-            onClick={onBackToHome}
-          >
+          <button className="ghost-action" type="button" onClick={onBackToHome}>
             <ArrowLeft size={18} />
             ホームへ
           </button>
@@ -670,6 +660,22 @@ function resultMessage(joseki: Joseki): string {
     return `応手成功！${joseki.name}`;
   }
   return `${joseki.name}完成！`;
+}
+
+function getJosekiStats(
+  stats: Map<string, JosekiStats>,
+  josekiId: string,
+): JosekiStats {
+  return (
+    stats.get(josekiId) ?? {
+      josekiId,
+      totalSuccess: 0,
+      totalFailure: 0,
+      totalAttempts: 0,
+      clearedToday: false,
+      successRate: Number.NaN,
+    }
+  );
 }
 
 function statusLabel(state: TrainerState): string {

@@ -55,8 +55,7 @@ export function buildStats(
   const totalFailure = mine.filter((r) => r.result === "failure").length;
   const totalAttempts = mine.length;
   const clearedToday = mine.some(
-    (r) =>
-      r.result === "success" && recordDateString(r.timestamp) === today,
+    (r) => r.result === "success" && recordDateString(r.timestamp) === today,
   );
   const successRate =
     totalAttempts > 0 ? totalSuccess / totalAttempts : Number.NaN;

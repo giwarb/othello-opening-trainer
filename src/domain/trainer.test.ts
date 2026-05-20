@@ -2,8 +2,14 @@
 import { JOSEKI_LIST } from "../data/joseki";
 import { playComputerMove, playPlayerMove, startTrainer } from "./trainer";
 
-const tori = JOSEKI_LIST.find((j) => j.id === "tori")!;
-const nezumi = JOSEKI_LIST.find((j) => j.id === "nezumi")!;
+function mustFindJoseki(id: string) {
+  const joseki = JOSEKI_LIST.find((j) => j.id === id);
+  if (!joseki) throw new Error(`Missing joseki fixture: ${id}`);
+  return joseki;
+}
+
+const tori = mustFindJoseki("tori");
+const nezumi = mustFindJoseki("nezumi");
 
 describe("trainer", () => {
   it("all joseki start with f5", () => {

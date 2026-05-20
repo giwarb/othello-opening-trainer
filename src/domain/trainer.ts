@@ -75,11 +75,28 @@ export function playPlayerMove(
     const board = applyMove(state.board, normalized, color);
     const moves = [...state.moves, normalized];
     if (moves.length >= state.joseki.moves.length) {
-      return { ...state, board, moves, status: "success", message: "定石完成！" };
+      return {
+        ...state,
+        board,
+        moves,
+        status: "success",
+        message: "定石完成！",
+      };
     }
-    return { ...state, board, moves, status: "playing", message: `${normalized} を着手` };
+    return {
+      ...state,
+      board,
+      moves,
+      status: "playing",
+      message: `${normalized} を着手`,
+    };
   } catch {
-    return { ...state, status: "failure", message: "合法手ではありません", correctMove: expected };
+    return {
+      ...state,
+      status: "failure",
+      message: "合法手ではありません",
+      correctMove: expected,
+    };
   }
 }
 
@@ -99,9 +116,21 @@ export function playComputerMove(state: TrainerState): TrainerState {
     const board = applyMove(state.board, move, color);
     const moves = [...state.moves, move];
     if (moves.length >= state.joseki.moves.length) {
-      return { ...state, board, moves, status: "success", message: "定石完成！" };
+      return {
+        ...state,
+        board,
+        moves,
+        status: "success",
+        message: "定石完成！",
+      };
     }
-    return { ...state, board, moves, status: "playing", message: `相手が ${move} を着手` };
+    return {
+      ...state,
+      board,
+      moves,
+      status: "playing",
+      message: `相手が ${move} を着手`,
+    };
   } catch {
     // Should not happen with valid joseki data
     return { ...state, status: "failure", message: `無効な手: ${move}` };

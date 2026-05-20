@@ -728,7 +728,9 @@ button:disabled {
   transition: transform 80ms;
 }
 
-.mode-btn:active { transform: scale(0.98); }
+.mode-btn:active {
+  transform: scale(0.98);
+}
 
 .mode-btn.today {
   color: #f7f3e8;
@@ -760,8 +762,6 @@ button:disabled {
   display: grid;
   gap: 32px;
 }
-
-.joseki-group {}
 
 .group-label {
   margin: 0 0 12px;
@@ -853,9 +853,18 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-.stat-ok { color: #2f7a57; font-weight: 700; }
-.stat-ng { color: #a33f35; font-weight: 700; }
-.stat-rate { color: #56655d; margin-left: auto; }
+.stat-ok {
+  color: #2f7a57;
+  font-weight: 700;
+}
+.stat-ng {
+  color: #a33f35;
+  font-weight: 700;
+}
+.stat-rate {
+  color: #56655d;
+  margin-left: auto;
+}
 
 .jcard-btn {
   width: 100%;
@@ -923,16 +932,28 @@ button:disabled {
 }
 
 @keyframes announce {
-  0%   { opacity: 0; transform: translateY(22px) scale(0.92); }
-  16%  { opacity: 1; transform: translateY(0) scale(1); }
-  78%  { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-12px) scale(0.96); }
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.92);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
 }
 
 /* ─── Practice layout update ────────────────────────────────────────────────── */
 
 .practice-layout {
-  grid-template-columns: 1fr !important;
+  grid-template-columns: 1fr;
 }
 
 .practice-top {
@@ -1038,4 +1059,3 @@ button:disabled {
 .result-again {
   min-width: 200px;
 }
-
