@@ -1,24 +1,23 @@
 ﻿import {
   ArrowLeft,
-  Play,
-  RotateCcw,
+  CheckCircle2,
+  RefreshCw,
   Shuffle,
-  Sparkles,
+  TrendingDown,
   Undo2,
+  XCircle,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { JOSEKI_LIST, type Joseki } from "./data/joseki";
 import {
-  josekiLabel,
-  type OpeningRecord,
-  openingAdvantageScore,
-  openingSearchText,
-  openings,
-  sortOpeningsForSide,
-} from "./domain/openings";
-import {
-  applyMove,
   type Board,
   type Cell,
   colorForPly,
@@ -28,31 +27,32 @@ import {
   pointToCoord,
 } from "./domain/othello";
 import {
-  chooseComputerMove,
   playComputerMove,
-  playKnownComputerMove,
   playPlayerMove,
-  rootTree,
   startTrainer,
-  type TrainerMode,
   type TrainerState,
 } from "./domain/trainer";
+import {
+  addRecord,
+  buildStats,
+  getRecords,
+  type JosekiRecord,
+  type JosekiStats,
+  todayString,
+} from "./domain/storage";
 
-type ModeChoice = "free" | string;
-type SideChoice = "black" | "white";
-type Phase = "setup" | "practice";
+type Phase = "home" | "animating" | "practice" | "result";
 type AnimatingCells = { placed: Set<string>; flipped: Set<string> };
 
 const sleep = (ms: number) =>
-  new Promise((resolve) => window.setTimeout(resolve, ms));
+  new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
-const curatedOpenings = openings.filter((opening) => opening.move_count >= 4);
-
+// ─────────────────────────────────────────────────────────────────────────────
+// App
+// ─────────────────────────────────────────────────────────────────────────────
 function App() {
-  const [phase, setPhase] = useState<Phase>("setup");
-  const [side, setSide] = useState<SideChoice>("black");
-  const [modeChoice, setModeChoice] = useState<ModeChoice>("free");
-  const [query, setQuery] = useState("");
+  const [phase, setPhase] = useState<Phase>("home");
+  const [selectedJoseki, setSelectedJoseki] = useState<Joseki | null>(null);
   const [state, setState] = useState<TrainerState | null>(null);
   const [history, setHistory] = useState<TrainerState[]>([]);
   const [animatingCells, setAnimatingCells] = useState<AnimatingCells>({
@@ -60,100 +60,117 @@ function App() {
     flipped: new Set(),
   });
   const [isAnimating, setIsAnimating] = useState(false);
+  const [records, setRecords] = useState<JosekiRecord[]>(getRecords);
+  const [resultHadMistake, setResultHadMistake] = useState(false);
   const stateRef = useRef<TrainerState | null>(null);
+  const sessionHasMistake = useRef(false);
 
-  const sortedOpenings = useMemo(
-    () => sortOpeningsForSide(curatedOpenings, side),
-    [side],
-  );
+  function refreshRecords() {
+    setRecords(getRecords());
+  }
 
-  const selectedOpening = curatedOpenings.find(
-    (opening) => opening.id === modeChoice,
-  );
-  const mode: TrainerMode = selectedOpening
-    ? { kind: "fixed", opening: selectedOpening }
-    : { kind: "free", tree: rootTree };
+  const stats = useMemo(() => {
+    const map = new Map<string, JosekiStats>();
+    for (const j of JOSEKI_LIST) {
+      map.set(j.id, buildStats(j.id, records));
+    }
+    return map;
+  }, [records]);
 
-  const filteredOpenings = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const list = needle
-      ? sortedOpenings.filter((opening) =>
-          openingSearchText(opening).includes(needle),
-        )
-      : sortedOpenings;
-    return list.slice(0, 180);
-  }, [query, sortedOpenings]);
+  function launchJoseki(joseki: Joseki) {
+    sessionHasMistake.current = false;
+    setSelectedJoseki(joseki);
+    setPhase("animating");
+  }
 
-  async function beginPractice() {
-    const next = startTrainer(side, mode);
-    commitState(next);
+  function startByMode(mode: "today" | "worst3") {
+    if (mode === "today") {
+      const pending = JOSEKI_LIST.filter((j) => !stats.get(j.id)?.clearedToday);
+      if (pending.length === 0) {
+        alert("今日は全定石をクリアしました！おつかれさまです！");
+        return;
+      }
+      launchJoseki(pending[Math.floor(Math.random() * pending.length)]);
+    } else {
+      const sorted = [...JOSEKI_LIST].sort((a, b) => {
+        const ra = stats.get(a.id)!.successRate;
+        const rb = stats.get(b.id)!.successRate;
+        const na = Number.isNaN(ra) ? -1 : ra;
+        const nb = Number.isNaN(rb) ? -1 : rb;
+        return na - nb;
+      });
+      const top3 = sorted.slice(0, 3);
+      launchJoseki(top3[Math.floor(Math.random() * top3.length)]);
+    }
+  }
+
+  const handleAnimationDone = useCallback(async () => {
+    const joseki = selectedJoseki;
+    if (!joseki) return;
+    const initial = startTrainer(joseki);
+    commitState(initial);
     setHistory([]);
     setAnimatingCells({ placed: new Set(), flipped: new Set() });
     setPhase("practice");
-    if (side === "white") {
-      await sleep(260);
-      await runComputerTurn(next);
-    }
-  }
 
-  async function restartSameSettings() {
-    const next = startTrainer(side, mode);
-    commitState(next);
-    setHistory([]);
-    setAnimatingCells({ placed: new Set(), flipped: new Set() });
-    if (side === "white") {
-      await sleep(260);
-      await runComputerTurn(next);
+    if (joseki.color === "white") {
+      await sleep(350);
+      await driveComputerMoves(initial);
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJoseki]);
 
-  function backToSetup() {
-    setPhase("setup");
-    commitState(null);
-    setHistory([]);
-    setAnimatingCells({ placed: new Set(), flipped: new Set() });
+  async function driveComputerMoves(base: TrainerState): Promise<TrainerState> {
+    let cur = base;
+    while (
+      cur.status === "playing" &&
+      colorForPly(cur.moves.length) !== cur.playerSide
+    ) {
+      const move = cur.joseki.moves[cur.moves.length];
+      if (!move) break;
+      cur = await animateMove(cur, move, "computer");
+      if (cur.status !== "playing") break;
+      await sleep(160);
+    }
+    return cur;
   }
 
   async function play(coord: string) {
     const current = stateRef.current;
-    if (!current || isAnimating || current.status !== "playing") {
-      return;
-    }
+    if (!current || isAnimating || current.status !== "playing") return;
+    if (colorForPly(current.moves.length) !== current.playerSide) return;
+
     setHistory((items) => [...items, current]);
+
     const next = await animateMove(current, coord, "player");
-    if (next.status === "playing") {
-      await sleep(240);
-      await runComputerTurn(next);
+
+    if (next.status === "failure") {
+      sessionHasMistake.current = true;
+      addRecord(next.joseki.id, "failure");
+      refreshRecords();
+      return;
+    }
+
+    if (next.status === "success") {
+      await handleSuccess(next);
+      return;
+    }
+
+    const afterComputer = await driveComputerMoves(next);
+    if (afterComputer.status === "success") {
+      await handleSuccess(afterComputer);
     }
   }
 
-  function undo() {
-    setHistory((items) => {
-      const previous = items.at(-1);
-      if (!previous) {
-        return items;
-      }
-      commitState(previous);
-      setAnimatingCells({ placed: new Set(), flipped: new Set() });
-      return items.slice(0, -1);
-    });
-  }
-
-  async function runComputerTurn(base: TrainerState) {
-    if (
-      base.status !== "playing" ||
-      colorForPly(base.moves.length) === base.playerSide
-    ) {
-      return;
+  async function handleSuccess(s: TrainerState) {
+    const hadMistake = sessionHasMistake.current;
+    if (!hadMistake) {
+      addRecord(s.joseki.id, "success");
+      refreshRecords();
     }
-    let move: string;
-    try {
-      move = chooseComputerMove(base, Math.random);
-    } catch {
-      commitState(playComputerMove(base));
-      return;
-    }
-    await animateMove(base, move, "computer");
+    setResultHadMistake(hadMistake);
+    await sleep(400);
+    setPhase("result");
   }
 
   async function animateMove(
@@ -164,14 +181,10 @@ function App() {
     setIsAnimating(true);
     const color = colorForPly(base.moves.length);
     const flips = getFlips(base.board, move, color);
-    const placedBoard = boardWithCell(base.board, move, color);
+
     commitState({
       ...base,
-      board: placedBoard,
-      message:
-        actor === "player"
-          ? `${move} を置きました`
-          : `相手が ${move} に置きました`,
+      board: boardWithCell(base.board, move, color),
     });
     setAnimatingCells({ placed: new Set([move]), flipped: new Set() });
     await sleep(280);
@@ -179,16 +192,16 @@ function App() {
     const finalState =
       actor === "player"
         ? playPlayerMove(base, move)
-        : playKnownComputerMove(base, move);
-    const finalBoard =
-      finalState.status === "failure"
-        ? applyMove(base.board, move, color)
-        : finalState.board;
-    commitState({
-      ...finalState,
-      board: finalBoard,
-      message: actor === "player" ? `${move} を着手` : `相手が ${move} を着手`,
-    });
+        : playComputerMove(base);
+
+    const msgOverride =
+      actor === "player"
+        ? finalState.status === "failure"
+          ? `間違い！正解は ${finalState.correctMove ?? "?"}`
+          : `${move} を着手`
+        : `相手が ${move} を着手`;
+
+    commitState({ ...finalState, message: msgOverride });
     setAnimatingCells({ placed: new Set(), flipped: new Set(flips) });
     await sleep(440);
     setAnimatingCells({ placed: new Set(), flipped: new Set() });
@@ -196,170 +209,256 @@ function App() {
     return stateRef.current ?? finalState;
   }
 
+  function undo() {
+    setHistory((items) => {
+      const prev = items.at(-1);
+      if (!prev) return items;
+      commitState(prev);
+      setAnimatingCells({ placed: new Set(), flipped: new Set() });
+      return items.slice(0, -1);
+    });
+  }
+
   function commitState(next: TrainerState | null) {
     stateRef.current = next;
     setState(next);
   }
 
+  function backToHome() {
+    setPhase("home");
+    commitState(null);
+    setHistory([]);
+    refreshRecords();
+  }
+
+  async function restartCurrent() {
+    if (!selectedJoseki) return;
+    sessionHasMistake.current = false;
+    setPhase("animating");
+  }
+
   return (
     <main className="app-shell">
-      <Header />
-      {phase === "setup" ? (
-        <SetupScreen
-          filteredOpenings={filteredOpenings}
-          modeChoice={modeChoice}
-          query={query}
-          selectedOpening={selectedOpening}
-          side={side}
-          onBegin={beginPractice}
-          onModeChange={setModeChoice}
-          onQueryChange={setQuery}
-          onSideChange={setSide}
+      {phase === "home" && (
+        <HomeScreen
+          stats={stats}
+          onLaunch={launchJoseki}
+          onStartMode={startByMode}
         />
-      ) : state ? (
+      )}
+      {phase === "animating" && selectedJoseki && (
+        <AnimatingScreen joseki={selectedJoseki} onDone={handleAnimationDone} />
+      )}
+      {phase === "practice" && state && (
         <PracticeScreen
           animatingCells={animatingCells}
           historyLength={history.length}
           isAnimating={isAnimating}
-          selectedOpening={selectedOpening}
           state={state}
-          onBackToSetup={backToSetup}
+          onBackToHome={backToHome}
           onPlay={play}
-          onRestart={restartSameSettings}
+          onRestart={restartCurrent}
           onUndo={undo}
         />
-      ) : null}
+      )}
+      {phase === "result" && state && (
+        <ResultScreen
+          hadMistake={resultHadMistake}
+          state={state}
+          onBackToHome={backToHome}
+          onPlayAgain={restartCurrent}
+        />
+      )}
     </main>
   );
 }
 
-function Header() {
+// ─────────────────────────────────────────────────────────────────────────────
+// HomeScreen
+// ─────────────────────────────────────────────────────────────────────────────
+function HomeScreen({
+  stats,
+  onLaunch,
+  onStartMode,
+}: {
+  stats: Map<string, JosekiStats>;
+  onLaunch: (joseki: Joseki) => void;
+  onStartMode: (mode: "today" | "worst3") => void;
+}) {
+  const whiteJoseki = JOSEKI_LIST.filter((j) => j.color === "white");
+  const blackJoseki = JOSEKI_LIST.filter((j) => j.color === "black");
+
+  const todayClearedCount = JOSEKI_LIST.filter(
+    (j) => stats.get(j.id)?.clearedToday,
+  ).length;
+
   return (
-    <section className="control-band">
-      <div className="brand-block">
-        <div className="mark" aria-hidden="true">
-          <Sparkles size={22} />
+    <div className="home-screen">
+      <header className="home-header">
+        <div className="home-title-block">
+          <h1>オセロ定石修業</h1>
+          <p>
+            定石を覚えて、毎日クリアを目指そう —{" "}
+            <strong>
+              {todayClearedCount} / {JOSEKI_LIST.length}
+            </strong>{" "}
+            本日クリア
+          </p>
         </div>
-        <div>
-          <h1>オセロ定石トレーナー</h1>
-          <p>{openings.length} 本の定石データを初手 f5 に正規化</p>
-        </div>
+      </header>
+
+      <div className="home-modes">
+        <button
+          className="mode-btn today"
+          type="button"
+          onClick={() => onStartMode("today")}
+        >
+          <Shuffle size={20} />
+          <span>
+            <strong>今日未クリアからランダム</strong>
+            <small>まだ正解していない定石を練習</small>
+          </span>
+        </button>
+        <button
+          className="mode-btn worst"
+          type="button"
+          onClick={() => onStartMode("worst3")}
+        >
+          <TrendingDown size={20} />
+          <span>
+            <strong>正解率ワースト3からランダム</strong>
+            <small>苦手な定石を集中練習</small>
+          </span>
+        </button>
       </div>
-    </section>
+
+      <div className="joseki-catalog">
+        <JosekiGroup
+          label="白番の定石"
+          items={whiteJoseki}
+          stats={stats}
+          onLaunch={onLaunch}
+        />
+        <JosekiGroup
+          label="黒番の定石"
+          items={blackJoseki}
+          stats={stats}
+          onLaunch={onLaunch}
+        />
+      </div>
+    </div>
   );
 }
 
-function SetupScreen({
-  filteredOpenings,
-  modeChoice,
-  query,
-  selectedOpening,
-  side,
-  onBegin,
-  onModeChange,
-  onQueryChange,
-  onSideChange,
+function JosekiGroup({
+  label,
+  items,
+  stats,
+  onLaunch,
 }: {
-  filteredOpenings: OpeningRecord[];
-  modeChoice: ModeChoice;
-  query: string;
-  selectedOpening?: OpeningRecord;
-  side: SideChoice;
-  onBegin: () => void;
-  onModeChange: (choice: ModeChoice) => void;
-  onQueryChange: (query: string) => void;
-  onSideChange: (side: SideChoice) => void;
+  label: string;
+  items: Joseki[];
+  stats: Map<string, JosekiStats>;
+  onLaunch: (joseki: Joseki) => void;
 }) {
   return (
-    <section className="setup-screen">
-      <div className="setup-main">
-        <div className="setup-copy">
-          <span>Opening Book Practice</span>
-          <h2>定石を選んで、盤上で覚える。</h2>
-        </div>
-
-        <fieldset className="setup-card">
-          <legend>手番選択</legend>
-          <div className="choice-grid">
-            <button
-              className={side === "black" ? "choice active" : "choice"}
-              type="button"
-              onClick={() => onSideChange("black")}
-            >
-              黒番で練習
-            </button>
-            <button
-              className={side === "white" ? "choice active" : "choice"}
-              type="button"
-              onClick={() => onSideChange("white")}
-            >
-              白番で練習
-            </button>
-          </div>
-        </fieldset>
-
-        <fieldset className="setup-card">
-          <legend>定石選択</legend>
-          <button
-            className={`mode-row ${modeChoice === "free" ? "selected" : ""}`}
-            type="button"
-            onClick={() => onModeChange("free")}
-          >
-            <Shuffle size={18} />
-            <span>
-              <strong>フリーモード</strong>
-              <small>局面から続く定石を相手がランダムに選びます</small>
-            </span>
-          </button>
-          <input
-            className="search"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="日本語名・手順で検索"
-            type="search"
+    <section className="joseki-group">
+      <h2 className="group-label">{label}</h2>
+      <div className="joseki-grid">
+        {items.map((j) => (
+          <JosekiCard
+            key={j.id}
+            joseki={j}
+            stats={stats.get(j.id)!}
+            onLaunch={onLaunch}
           />
-          <div className="opening-list setup-list">
-            {filteredOpenings.map((opening) => (
-              <button
-                className={`opening-row ${modeChoice === opening.id ? "selected" : ""}`}
-                key={opening.id}
-                type="button"
-                onClick={() => onModeChange(opening.id)}
-              >
-                <strong>{josekiLabel(opening)}</strong>
-                <span>
-                  {opening.sequence}
-                  {formatOpeningScore(opening)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <div className="start-summary">
-          <div>
-            <span>選択中</span>
-            <strong>
-              {selectedOpening ? josekiLabel(selectedOpening) : "フリーモード"}
-            </strong>
-          </div>
-          <button className="primary-action" type="button" onClick={onBegin}>
-            <Play size={18} />
-            練習開始
-          </button>
-        </div>
+        ))}
       </div>
     </section>
   );
 }
 
+function JosekiCard({
+  joseki,
+  stats,
+  onLaunch,
+}: {
+  joseki: Joseki;
+  stats: JosekiStats;
+  onLaunch: (joseki: Joseki) => void;
+}) {
+  const rateText = Number.isNaN(stats.successRate)
+    ? "未挑戦"
+    : `${Math.round(stats.successRate * 100)}%`;
+
+  return (
+    <div className={`joseki-card ${stats.clearedToday ? "cleared" : ""}`}>
+      <div className="jcard-head">
+        <span className={`color-badge ${joseki.color}`}>
+          {joseki.color === "white" ? "白" : "黒"}
+        </span>
+        <strong className="jcard-name">{joseki.name}</strong>
+        {stats.clearedToday && (
+          <span className="today-badge" title="本日クリア済">
+            <CheckCircle2 size={16} />
+          </span>
+        )}
+      </div>
+      <code className="jcard-seq">{joseki.moves.join(" ")}</code>
+      <div className="jcard-stats">
+        <span className="stat-ok">✓ {stats.totalSuccess}</span>
+        <span className="stat-ng">✗ {stats.totalFailure}</span>
+        <span className="stat-rate">{rateText}</span>
+      </div>
+      <button
+        className="jcard-btn"
+        type="button"
+        onClick={() => onLaunch(joseki)}
+      >
+        練習
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AnimatingScreen  ("あなたは{黒/白}番です")
+// ─────────────────────────────────────────────────────────────────────────────
+function AnimatingScreen({
+  joseki,
+  onDone,
+}: {
+  joseki: Joseki;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const id = window.setTimeout(onDone, 2300);
+    return () => window.clearTimeout(id);
+  }, [onDone]);
+
+  return (
+    <div className="announce-screen">
+      <p className="announce-text">
+        あなたは
+        <span className={`announce-badge ${joseki.color}`}>
+          {joseki.color === "white" ? "白" : "黒"}
+        </span>
+        番です
+      </p>
+      <p className="announce-sub">{joseki.name}</p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PracticeScreen
+// ─────────────────────────────────────────────────────────────────────────────
 function PracticeScreen({
   animatingCells,
   historyLength,
   isAnimating,
-  selectedOpening,
   state,
-  onBackToSetup,
+  onBackToHome,
   onPlay,
   onRestart,
   onUndo,
@@ -367,52 +466,44 @@ function PracticeScreen({
   animatingCells: AnimatingCells;
   historyLength: number;
   isAnimating: boolean;
-  selectedOpening?: OpeningRecord;
   state: TrainerState;
-  onBackToSetup: () => void;
+  onBackToHome: () => void;
   onPlay: (coord: string) => void;
   onRestart: () => void;
   onUndo: () => void;
 }) {
   const counts = discCounts(state.board);
-  const nextColor =
-    state.status === "playing"
-      ? state.moves.length % 2 === 0
-        ? "black"
-        : "white"
-      : null;
-  const playableMoves =
-    nextColor === state.playerSide && state.status === "playing" && !isAnimating
-      ? new Set(
-          state.moves.length === 0
-            ? ["f5"]
-            : legalMoves(state.board, state.playerSide),
-        )
-      : new Set<string>();
-  const latestOpponentMove = [...state.moves]
-    .map((move, index) => ({ move, index }))
-    .reverse()
-    .find(({ index }) => colorForPly(index) !== state.playerSide);
-  const reachedOpenings =
-    state.mode.kind === "fixed" && state.status === "success" && selectedOpening
-      ? [selectedOpening]
-      : state.currentOpenings;
-  const reachedOpening = reachedOpenings.at(-1);
+  const ply = state.moves.length;
+  const currentColor = colorForPly(ply);
+  const isPlayerTurn =
+    state.status === "playing" &&
+    currentColor === state.playerSide &&
+    !isAnimating;
+
+  const playableMoves = isPlayerTurn
+    ? new Set(legalMoves(state.board, state.playerSide))
+    : new Set<string>();
+
+  const colorLabel = state.playerSide === "white" ? "白番" : "黒番";
 
   return (
     <section className="practice-layout">
       <div className="practice-top">
-        <button className="ghost-action" type="button" onClick={onBackToSetup}>
+        <button className="ghost-action" type="button" onClick={onBackToHome}>
           <ArrowLeft size={18} />
-          設定へ
+          ホームへ
         </button>
+        <div className="practice-info">
+          <span className={`color-badge ${state.playerSide}`}>{colorLabel}</span>
+          <strong>{state.joseki.name}</strong>
+        </div>
         <button className="ghost-action" type="button" onClick={onRestart}>
-          <RotateCcw size={18} />
-          やり直し
+          <RefreshCw size={18} />
+          最初から
         </button>
       </div>
 
-      <section className="board-zone">
+      <div className="board-zone">
         <div className="status-line">
           <div>
             <span className={`status-pill ${state.status}`}>
@@ -420,7 +511,7 @@ function PracticeScreen({
             </span>
             <p>{state.message}</p>
           </div>
-          <div className="score" role="status" aria-label="石数">
+          <div className="score">
             <span className="disc black" />
             {counts.black}
             <span className="disc white" />
@@ -435,34 +526,15 @@ function PracticeScreen({
           onPlay={onPlay}
         />
 
-        {reachedOpening ? (
-          <div className="joseki-banner" key={reachedOpening.id}>
-            {josekiLabel(reachedOpening)}
-          </div>
-        ) : null}
-
-        {state.status === "success" ? (
-          <div className="clear-panel">
-            <strong>クリア</strong>
-            <span>
-              {reachedOpening
-                ? `${josekiLabel(reachedOpening)}を最後まで打てました`
-                : "定石の終端まで到達しました"}
-            </span>
-            <button
-              className="primary-action"
-              type="button"
-              onClick={onBackToSetup}
-            >
-              また最初から
-            </button>
-          </div>
-        ) : null}
-
-        {state.status === "failure" ? (
+        {state.status === "failure" && (
           <div className="failure-panel">
-            <strong>失敗</strong>
-            <span>{state.message}</span>
+            <strong>
+              <XCircle size={22} />
+              間違い！
+            </strong>
+            <span>
+              正解は <kbd>{state.correctMove}</kbd> でした
+            </span>
             <button
               className="primary-action"
               disabled={historyLength === 0}
@@ -470,10 +542,10 @@ function PracticeScreen({
               onClick={onUndo}
             >
               <Undo2 size={18} />
-              一手戻る
+              元に戻す
             </button>
           </div>
-        ) : null}
+        )}
 
         <div className="move-strip">
           {state.moves.map((move, index) => (
@@ -481,44 +553,18 @@ function PracticeScreen({
               key={`${move}-${index}`}
               className={index % 2 === 0 ? "black-move" : "white-move"}
             >
-              {index + 1}. {move}
+              {index + 1}.{move}
             </span>
           ))}
         </div>
-      </section>
-
-      <aside className="info-panel">
-        <h2>現在</h2>
-        <InfoBlock
-          title="練習"
-          value={
-            selectedOpening ? josekiLabel(selectedOpening) : "フリーモード"
-          }
-        />
-        <InfoBlock
-          title="相手の直前手"
-          value={
-            latestOpponentMove ? latestOpponentMove.move : "まだありません"
-          }
-        />
-        <InfoBlock title="手数" value={`${state.moves.length}`} />
-        <div className="terminal-list">
-          <h3>到達した定石</h3>
-          {reachedOpenings.length > 0 ? (
-            reachedOpenings
-              .slice(-6)
-              .map((opening) => (
-                <span key={opening.id}>{josekiLabel(opening)}</span>
-              ))
-          ) : (
-            <span>未到達</span>
-          )}
-        </div>
-      </aside>
+      </div>
     </section>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BoardView
+// ─────────────────────────────────────────────────────────────────────────────
 function BoardView({
   state,
   playableMoves,
@@ -543,7 +589,7 @@ function BoardView({
               <button
                 aria-label={coord}
                 className={`square ${canPlay ? "playable" : ""}`}
-                disabled={!canPlay || state.status !== "playing"}
+                disabled={!canPlay}
                 key={coord}
                 type="button"
                 onClick={() => onPlay(coord)}
@@ -564,49 +610,87 @@ function BoardView({
   );
 }
 
-function InfoBlock({ title, value }: { title: string; value: string }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// ResultScreen
+// ─────────────────────────────────────────────────────────────────────────────
+function ResultScreen({
+  hadMistake,
+  state,
+  onBackToHome,
+  onPlayAgain,
+}: {
+  hadMistake: boolean;
+  state: TrainerState;
+  onBackToHome: () => void;
+  onPlayAgain: () => void;
+}) {
+  const message = hadMistake ? "完走しましたが失敗がありました" : resultMessage(state.joseki);
+
   return (
-    <div className="info-block">
-      <span>{title}</span>
-      <strong>{value}</strong>
+    <div className="result-screen">
+      <div className={`result-card ${hadMistake ? "had-mistake" : "clean"}`}>
+        <p className="result-message">{message}</p>
+        {!hadMistake && (
+          <p className="result-seq">{state.joseki.moves.join(" › ")}</p>
+        )}
+        {hadMistake && (
+          <p className="result-hint">
+            「最初からやり直す」でミスなしクリアを目指しましょう！
+          </p>
+        )}
+        <div className="result-actions">
+          <button
+            className="primary-action result-again"
+            type="button"
+            onClick={onPlayAgain}
+          >
+            <RefreshCw size={18} />
+            最初からやり直す
+          </button>
+          <button
+            className="ghost-action"
+            type="button"
+            onClick={onBackToHome}
+          >
+            <ArrowLeft size={18} />
+            ホームへ
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function formatOpeningScore(opening: OpeningRecord): string {
-  const score = openingAdvantageScore(opening);
-  if (score === null || score === 0) {
-    return "";
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function resultMessage(joseki: Joseki): string {
+  if (joseki.color === "white") {
+    if (joseki.id === "tori") return "酉定石完成！";
+    return `応手成功！${joseki.name}`;
   }
-  return score > 0 ? ` / 黒+${score}` : ` / 白+${Math.abs(score)}`;
+  return `${joseki.name}完成！`;
 }
 
 function statusLabel(state: TrainerState): string {
-  if (state.status === "success") {
-    return "成功";
-  }
-  if (state.status === "failure") {
-    return "失敗";
-  }
-  return state.moves.length % 2 === 0 ? "黒番" : "白番";
+  if (state.status === "success") return "成功";
+  if (state.status === "failure") return "失敗";
+  return colorForPly(state.moves.length) === "black" ? "黒番" : "白番";
 }
 
 function boardWithCell(board: Board, move: string, cell: Cell): Board {
   const next = board.map((row) => [...row]);
-  const [file, rankText] = [move[0], move.slice(1)];
-  const col = "abcdefgh".indexOf(file);
-  const row = Number(rankText) - 1;
+  const col = "abcdefgh".indexOf(move[0]);
+  const row = Number(move.slice(1)) - 1;
   next[row][col] = cell;
   return next;
 }
 
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Bootstrap
+// ─────────────────────────────────────────────────────────────────────────────
 const root = document.getElementById("root");
-
-if (!root) {
-  throw new Error("Root element was not found");
-}
-
+if (!root) throw new Error("Root element was not found");
 createRoot(root).render(<App />);
 
 if ("serviceWorker" in navigator) {

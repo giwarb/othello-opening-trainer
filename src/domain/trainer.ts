@@ -1,45 +1,33 @@
-﻿import {
-  createOpeningTree,
-  findNode,
-  type OpeningNode,
-  type OpeningRecord,
-  openings,
-} from "./openings";
-import { applyMove, type Board, colorForPly, initialBoard, legalMoves } from "./othello";
+﻿import type { Joseki } from "../data/joseki";
+import {
+  applyMove,
+  type Board,
+  colorForPly,
+  getFlips,
+  initialBoard,
+} from "./othello";
 
 export type PlayerSide = "black" | "white";
-export type TrainerMode =
-  | { kind: "fixed"; opening: OpeningRecord }
-  | { kind: "free"; tree: OpeningNode };
-
 export type TrainerStatus = "playing" | "success" | "failure";
 
 export type TrainerState = {
   board: Board;
   moves: string[];
   playerSide: PlayerSide;
-  mode: TrainerMode;
+  joseki: Joseki;
   status: TrainerStatus;
   message: string;
-  currentOpenings: OpeningRecord[];
+  correctMove?: string; // correct joseki move when status=failure
 };
 
-export type Rng = () => number;
-
-const rootTree = createOpeningTree(openings);
-
-export function startTrainer(
-  playerSide: PlayerSide,
-  mode: TrainerMode,
-): TrainerState {
+export function startTrainer(joseki: Joseki): TrainerState {
   return {
     board: initialBoard(),
     moves: [],
-    playerSide,
-    mode,
+    playerSide: joseki.color,
+    joseki,
     status: "playing",
     message: "開始",
-    currentOpenings: [],
   };
 }
 
@@ -47,153 +35,80 @@ export function playPlayerMove(
   state: TrainerState,
   move: string,
 ): TrainerState {
-  if (state.status !== "playing") {
-    return state;
-  }
-  if (colorForPly(state.moves.length) !== state.playerSide) {
-    return { ...state, status: "failure", message: "相手番です" };
-  }
+  if (state.status !== "playing") return state;
+
+  const ply = state.moves.length;
+  const color = colorForPly(ply);
+  if (color !== state.playerSide) return state; // not player's turn
 
   const normalized = move.toLowerCase();
-  const validation = validateMove(state, normalized);
-  if (!validation.ok) {
-    return { ...state, status: "failure", message: validation.message };
-  }
 
-  return checkTerminal(applyKnownMove(state, normalized));
-}
+  // Silently ignore illegal Othello moves
+  if (getFlips(state.board, normalized, color).length === 0) return state;
 
-export function playComputerMove(
-  state: TrainerState,
-  rng: Rng = Math.random,
-): TrainerState {
-  if (state.status !== "playing") {
-    return state;
-  }
-  if (colorForPly(state.moves.length) === state.playerSide) {
-    return state;
-  }
-  let choice: string;
-  try {
-    choice = chooseComputerMove(state, rng);
-  } catch {
-    return { ...state, status: "success", message: "合法手がありません" };
-  }
-  return checkTerminal(applyKnownMove(state, choice));
-}
+  const expected = state.joseki.moves[ply];
 
-export function expectedMoves(state: TrainerState): string[] {
-  if (state.mode.kind === "fixed") {
-    const expected = state.mode.opening.moves[state.moves.length];
-    return expected ? [expected] : [];
-  }
-  const node = findNode(state.mode.tree, state.moves);
-  return node ? [...node.children.keys()] : [];
-}
-
-export function chooseComputerMove(
-  state: TrainerState,
-  rng: Rng = Math.random,
-): string {
-  const color = colorForPly(state.moves.length);
-  const allLegal = legalMoves(state.board, color);
-  if (allLegal.length === 0) {
-    throw new Error("No legal move is available");
-  }
-
-  const options = expectedMoves(state).filter((m) => allLegal.includes(m));
-  if (options.length === 0) {
-    return allLegal[Math.floor(rng() * allLegal.length)];
-  }
-  if (state.mode.kind === "fixed") {
-    return options[0];
-  }
-
-  const node = findNode(state.mode.tree, state.moves);
-  if (!node) {
-    return allLegal[Math.floor(rng() * allLegal.length)];
-  }
-
-  const ranked = options.map((move) => {
-    const child = node.children.get(move);
-    const longest = child
-      ? Math.max(
-          ...child.reachableOpenings.map((opening) => opening.move_count),
-        )
-      : 0;
-    return { move, longest };
-  });
-  const maxLength = Math.max(...ranked.map((item) => item.longest));
-  const best = ranked.filter((item) => item.longest === maxLength);
-  return best[Math.floor(rng() * best.length)]?.move ?? best[0].move;
-}
-
-export function playKnownComputerMove(
-  state: TrainerState,
-  move: string,
-): TrainerState {
-  return checkTerminal(applyKnownMove(state, move));
-}
-
-export function currentFreeOpenings(state: TrainerState): OpeningRecord[] {
-  const tree = state.mode.kind === "free" ? state.mode.tree : rootTree;
-  const node = findNode(tree, state.moves);
-  return node?.terminalOpenings ?? [];
-}
-
-function applyKnownMove(state: TrainerState, move: string): TrainerState {
-  try {
-    const board = applyMove(state.board, move, colorForPly(state.moves.length));
-    const moves = [...state.moves, move];
-    const currentOpenings =
-      state.mode.kind === "free"
-        ? (findNode(state.mode.tree, moves)?.terminalOpenings ?? [])
-        : [];
-    return {
-      ...state,
-      board,
-      moves,
-      currentOpenings,
-      message: `${move} を着手`,
-    };
-  } catch {
-    return {
-      ...state,
-      status: "failure",
-      message: `${move} はこの盤面では合法手ではありません`,
-    };
-  }
-}
-
-function validateMove(
-  state: TrainerState,
-  move: string,
-): { ok: true } | { ok: false; message: string } {
-  if (state.moves.length === 0 && move !== "f5") {
-    return { ok: false, message: "1手目は f5 のみです" };
-  }
-  return { ok: true };
-}
-
-function checkTerminal(state: TrainerState): TrainerState {
-  if (state.status !== "playing") {
-    return state;
-  }
-  if (state.mode.kind === "fixed") {
-    if (state.moves.length >= state.mode.opening.moves.length) {
-      return { ...state, status: "success", message: "定石を完走しました" };
+  if (normalized !== expected) {
+    // Wrong joseki move – apply it so user can see, then they must undo
+    try {
+      const board = applyMove(state.board, normalized, color);
+      return {
+        ...state,
+        board,
+        moves: [...state.moves, normalized],
+        status: "failure",
+        message: "定石から外れました",
+        correctMove: expected,
+      };
+    } catch {
+      return {
+        ...state,
+        status: "failure",
+        message: "定石から外れました",
+        correctMove: expected,
+      };
     }
-    return state;
   }
 
-  const node = findNode(state.mode.tree, state.moves);
-  if (!node) {
-    return state;
+  // Correct move
+  try {
+    const board = applyMove(state.board, normalized, color);
+    const moves = [...state.moves, normalized];
+    if (moves.length >= state.joseki.moves.length) {
+      return { ...state, board, moves, status: "success", message: "定石完成！" };
+    }
+    return { ...state, board, moves, status: "playing", message: `${normalized} を着手` };
+  } catch {
+    return { ...state, status: "failure", message: "合法手ではありません", correctMove: expected };
   }
-  if (node.children.size === 0 && node.terminalOpenings.length > 0) {
-    return { ...state, status: "success", message: "展開先のない終端です" };
-  }
-  return state;
 }
 
-export { rootTree };
+export function playComputerMove(state: TrainerState): TrainerState {
+  if (state.status !== "playing") return state;
+
+  const ply = state.moves.length;
+  const color = colorForPly(ply);
+  if (color === state.playerSide) return state; // player's turn
+
+  const move = state.joseki.moves[ply];
+  if (!move) {
+    return { ...state, status: "success", message: "定石完成！" };
+  }
+
+  try {
+    const board = applyMove(state.board, move, color);
+    const moves = [...state.moves, move];
+    if (moves.length >= state.joseki.moves.length) {
+      return { ...state, board, moves, status: "success", message: "定石完成！" };
+    }
+    return { ...state, board, moves, status: "playing", message: `相手が ${move} を着手` };
+  } catch {
+    // Should not happen with valid joseki data
+    return { ...state, status: "failure", message: `無効な手: ${move}` };
+  }
+}
+
+/** Expected joseki move at the current ply, or undefined */
+export function expectedMove(state: TrainerState): string | undefined {
+  return state.joseki.moves[state.moves.length];
+}

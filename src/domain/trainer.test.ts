@@ -1,114 +1,65 @@
 ﻿import { describe, expect, it } from "vitest";
-import {
-  createOpeningTree,
-  type OpeningRecord,
-  openings,
-  sortOpeningsForSide,
-} from "./openings";
-import {
-  chooseComputerMove,
-  expectedMoves,
-  playComputerMove,
-  playPlayerMove,
-  startTrainer,
-  type TrainerMode,
-} from "./trainer";
+import { JOSEKI_LIST } from "../data/joseki";
+import { playComputerMove, playPlayerMove, startTrainer } from "./trainer";
 
-const tiger = openings.find(
-  (opening) =>
-    opening.primary_name === "Tiger" && opening.sequence === "F5d6C3d3C4",
-);
-
-if (!tiger) {
-  throw new Error("Expected Tiger opening fixture to exist");
-}
+const tori = JOSEKI_LIST.find((j) => j.id === "tori")!;
+const nezumi = JOSEKI_LIST.find((j) => j.id === "nezumi")!;
 
 describe("trainer", () => {
-  it("normalizes openings so the first move is f5", () => {
-    expect(openings.every((opening) => opening.moves[0] === "f5")).toBe(true);
+  it("all joseki start with f5", () => {
+    expect(JOSEKI_LIST.every((j) => j.moves[0] === "f5")).toBe(true);
   });
 
-  it("deduplicates openings by normalized move sequence", () => {
-    const sequences = openings.map((opening) => opening.moves.join(""));
-    expect(new Set(sequences).size).toBe(openings.length);
-    expect(openings.length).toBeLessThan(623);
+  it("starts in playing state", () => {
+    const state = startTrainer(tori);
+    expect(state.status).toBe("playing");
+    expect(state.moves).toEqual([]);
+    expect(state.playerSide).toBe("white");
   });
 
-  it("can play a computer move when player chooses white", () => {
-    const state = startTrainer("white", { kind: "fixed", opening: tiger });
-    const next = playComputerMove(state, () => 0);
+  it("computer plays first move for white-side joseki", () => {
+    const state = startTrainer(tori);
+    const next = playComputerMove(state);
     expect(next.moves).toEqual(["f5"]);
-    expect(expectedMoves(next)).toEqual(["d6"]);
+    expect(next.status).toBe("playing");
   });
 
-  it("fails when fixed-mode player leaves the selected opening", () => {
-    const state = startTrainer("black", { kind: "fixed", opening: tiger });
-    const failed = playPlayerMove(state, "c4");
-    expect(failed.status).toBe("failure");
-    expect(failed.message).toContain("f5");
-  });
-
-  it("succeeds when the fixed opening reaches its terminal move", () => {
-    let state = startTrainer("black", { kind: "fixed", opening: tiger });
+  it("player succeeds on correct joseki sequence (black side)", () => {
+    // nezumi: f5 f4 e3 (user=black plays f5, e3; computer plays f4)
+    let state = startTrainer(nezumi);
     state = playPlayerMove(state, "f5");
-    state = playComputerMove(state, () => 0);
-    state = playPlayerMove(state, "c3");
-    state = playComputerMove(state, () => 0);
-    state = playPlayerMove(state, "c4");
+    expect(state.status).toBe("playing");
+    state = playComputerMove(state);
+    expect(state.moves).toEqual(["f5", "f4"]);
+    state = playPlayerMove(state, "e3");
     expect(state.status).toBe("success");
   });
 
-  it("free mode accepts any move that continues at least one opening", () => {
-    const tree = createOpeningTree(openings);
-    const mode: TrainerMode = { kind: "free", tree };
-    const state = startTrainer("black", mode);
-    const next = playPlayerMove(state, "f5");
-    expect(next.status).toBe("playing");
-    expect(next.moves).toEqual(["f5"]);
+  it("failure when player leaves joseki", () => {
+    const state = startTrainer(nezumi);
+    const failed = playPlayerMove(state, "d3"); // wrong first move
+    expect(failed.status).toBe("failure");
+    expect(failed.correctMove).toBe("f5");
   });
 
-  it("free mode computer prefers the move with the longest continuation", () => {
-    const records = [
-      makeOpening("short", ["f5", "d6", "c3"]),
-      makeOpening("long", ["f5", "f6", "d3", "f4", "e3"]),
-    ];
-    const mode: TrainerMode = {
-      kind: "free",
-      tree: createOpeningTree(records),
-    };
-    const state = playPlayerMove(startTrainer("black", mode), "f5");
-    expect(chooseComputerMove(state, () => 0)).toBe("f6");
+  it("ignores illegal Othello moves silently", () => {
+    const state = startTrainer(nezumi);
+    const same = playPlayerMove(state, "a1"); // not a legal Othello move
+    expect(same.status).toBe("playing");
+    expect(same.moves).toEqual([]);
   });
 
-  it("sorts rated openings toward the selected side", () => {
-    const black = makeOpening("black", ["f5", "d6"]);
-    black.source_notes = ["othlog evaluation: 黒+2"];
-    const white = makeOpening("white", ["f5", "f6"]);
-    white.source_notes = ["othlog evaluation: 白+2"];
-    const unknown = makeOpening("unknown", ["f5", "f4"]);
-
-    expect(sortOpeningsForSide([unknown, white, black], "black")[0].id).toBe(
-      "black",
-    );
-    expect(sortOpeningsForSide([unknown, white, black], "white")[0].id).toBe(
-      "white",
-    );
+  it("succeeds when all moves of joseki are played", () => {
+    let state = startTrainer(tori);
+    for (const move of tori.moves) {
+      if (state.status !== "playing") break;
+      if (state.moves.length % 2 === 0) {
+        // black's turn (computer for white joseki)
+        state = playComputerMove(state);
+      } else {
+        state = playPlayerMove(state, move);
+      }
+    }
+    expect(state.status).toBe("success");
   });
 });
-
-function makeOpening(id: string, moves: string[]): OpeningRecord {
-  return {
-    id,
-    primary_name: id,
-    aliases: [],
-    japanese_names: [],
-    sequence: moves.join(""),
-    moves,
-    move_count: moves.length,
-    family: "unknown" as const,
-    tags: [],
-    sources: [],
-    source_notes: [],
-    parent_id: null,
-  };
-}
