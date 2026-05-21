@@ -60,13 +60,55 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "usagi",
     name: "兎対応",
     color: "white",
-    moves: ["f5", "d6", "c5", "f4", "e3", "c6"],
+    moves: ["f5", "d6", "c5", "f4", "e3", "c6", "d3", "f6", "e6", "d7"],
     explanation: {
-      aim: "黒がc5に来て兎の形にしたとき、白はf4で右側に石を置きます。黒がe3に来たら、白はc6で左下にも道を作ります。黒に一か所だけで攻められないようにします。",
+      aim: "黒がc5に来て兎の形にしたとき、白はf4からc6へ進んで、ローズの形まで受けます。黒が中央に近づいてきたら、白はf6やd7で黒の気持ちよい場所を消します。",
       followUp: [
-        "黒に左側だけで攻められないよう、白の石を左右に分ける。",
-        "白の石が外に広がりすぎないように注意する。",
-        "黒が中央を使ってきたら、白も中央に戻れる手を探す。",
+        "白は黒のc4への道を見つけたら、先に消すことを考える。",
+        "端へ急がず、中央に近い白石を使って黒の打ちたい場所を減らす。",
+        "黒の石をたくさん返すより、次に打てる場所を残す。",
+      ],
+    },
+  },
+  {
+    id: "inoue_response",
+    name: "井上流対応",
+    color: "white",
+    moves: ["f5", "d6", "c5", "f4", "e3", "c6", "e6", "f6"],
+    explanation: {
+      aim: "兎から白がc6に受けたあと、黒がe6で中央に近い良い手を作ろうとする形です。白はf6でその道をふさぎ、黒が楽にc4へ入れないようにします。",
+      followUp: [
+        "黒が中央へ戻る道を作ったら、白はその入口を消す。",
+        "白は石を取りすぎず、黒が次に打ちたい場所を先に見る。",
+        "右側に白の足場を残して、左側だけで戦わない。",
+      ],
+    },
+  },
+  {
+    id: "horse_response",
+    name: "馬対応",
+    color: "white",
+    moves: ["f5", "d6", "c5", "f4", "d3", "c3"],
+    explanation: {
+      aim: "兎の途中で黒がe3ではなくd3に来た形です。白はc3に戻って中央に近い石を作り、黒に外側だけから攻めさせないようにします。",
+      followUp: [
+        "黒が形を変えてきたら、白は中央の近くに戻る。",
+        "白の石を左右に分けすぎず、つながりを大事にする。",
+        "黒が辺へ向かう前に、白の次の打てる場所を残す。",
+      ],
+    },
+  },
+  {
+    id: "chat_response",
+    name: "猫本線対応",
+    color: "white",
+    moves: ["f5", "d6", "c4", "d3", "c5", "f4"],
+    explanation: {
+      aim: "黒がc4からc5へ進んで猫の形を作るときの受けです。白はd3からf4へ回り、黒の石を一か所に集めすぎないようにします。",
+      followUp: [
+        "黒が左側へ集まったら、白は右側にも足場を作る。",
+        "白は返す石の数より、次に打てる場所の多さを見る。",
+        "黒のかたまりにくっつきすぎず、少し離れた場所も見る。",
       ],
     },
   },
@@ -113,24 +155,10 @@ export const JOSEKI_LIST: Joseki[] = [
     },
   },
   {
-    id: "compos",
-    name: "コンポス",
-    color: "white",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "f6", "f3", "e3", "c5"],
-    explanation: {
-      aim: "黒がf6に来たとき、白がf3で中央に近いところへ戻る受け方です。ノーカンよりも、まんなかで受ける感じになります。",
-      followUp: [
-        "黒に右側だけで形を作らせない。",
-        "白の石が多くなりすぎたら、次に打てる場所が残っているか確認する。",
-        "中央に近い白石を使って、黒のよい手を減らす。",
-      ],
-    },
-  },
-  {
     id: "brightwell",
     name: "ブライトウェル対応",
     color: "white",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e3", "f6", "c5", "b3"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e3", "f6", "e6"],
     explanation: {
       aim: "黒が白の使いたかったe3を先に取ってきた形です。白はf6で中央近くに石を置き、黒だけが楽に広がらないようにします。",
       followUp: [
@@ -144,7 +172,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "leaders_tiger",
     name: "Leader's Tiger対応",
     color: "white",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e6", "b3", "c5", "c6"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e6", "b3", "c6"],
     explanation: {
       aim: "黒がe6に来て、いつものローズビルとは違う形にしてきます。白はb3で左側に手を作り、黒が中央を大きく使いすぎないようにします。",
       followUp: [
@@ -255,6 +283,20 @@ export const JOSEKI_LIST: Joseki[] = [
     },
   },
   {
+    id: "heath_response",
+    name: "飛び出し対応",
+    color: "black",
+    moves: ["f5", "f6", "e6", "f4", "g5", "e7", "f7"],
+    explanation: {
+      aim: "白がf6からf4へ来たとき、黒がg5へ大きく飛び出す形です。外へ出る手ですが、右側に黒の足場を作って白に受けを考えさせます。",
+      followUp: [
+        "黒は右側に出ても、石を重くしすぎない。",
+        "白が受けてきたら、中央へ戻る道を忘れない。",
+        "端を取りに行く前に、白に良い手を渡していないか見る。",
+      ],
+    },
+  },
+  {
     id: "nezumi",
     name: "鼠対応",
     color: "black",
@@ -286,7 +328,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "missile",
     name: "ミサイル対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "g5", "c6", "f4", "e3"],
+    moves: ["f5", "d6", "c3", "g5", "c6", "e3"],
     explanation: {
       aim: "白がg5に飛び出してきた形です。黒はc6で反対側に手を作り、白の飛び出しにそのまま付き合いすぎないようにします。",
       followUp: [
@@ -300,7 +342,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "torake",
     name: "虎系犬素対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "f3", "d3", "c4", "f4"],
+    moves: ["f5", "d6", "c3", "f3", "d3", "f4"],
     explanation: {
       aim: "白がf3に来て、虎の本線から少しずらしてきた形です。黒はd3で中央に戻り、c4へ進んで形を整えます。",
       followUp: [
@@ -314,7 +356,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "yes_ryu",
     name: "イエス流対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "d3", "c4", "b3", "c6", "f4", "c5"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "b3", "c6", "f4"],
     explanation: {
       aim: "白がb3に来て、左側から形を変えてきます。黒はc6で下側にも道を作り、c5で中央に近い足場を作ります。",
       followUp: [
@@ -328,7 +370,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "berg_tiger",
     name: "Berg Tiger対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "d3", "c4", "b5", "c5", "f4", "c6"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "b5", "c5", "f4", "e6"],
     explanation: {
       aim: "白がb5に来て、左下から形を変えてきます。黒はc5で虎の形に近づけ、c6で下側にも足場を作ります。",
       followUp: [
@@ -356,7 +398,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "mako_tora",
     name: "まこ虎対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "c5", "b5", "c6", "b4", "e3"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "c5", "b5", "b4", "f6"],
     explanation: {
       aim: "白がb5に来て、ローズビル本線から外してきた形です。黒はc6で左下に足場を作り、e3で中央にも戻る道を作ります。",
       followUp: [
