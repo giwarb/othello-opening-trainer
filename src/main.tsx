@@ -80,7 +80,7 @@ function App() {
   );
   const [soundEffectPreset, setSoundEffectPreset] =
     useState<SoundEffectPresetId>(() =>
-      readPresetSetting("othello_se_preset", SOUND_EFFECT_PRESETS, "woodClick"),
+      readPresetSetting("othello_se_preset", SOUND_EFFECT_PRESETS, "crisp"),
     );
 
   function getAudio() {
@@ -372,60 +372,88 @@ function AudioControls({
   onToggleMusic: () => void;
   onToggleSoundEffects: () => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <fieldset className="audio-controls">
-      <legend className="sr-only">音量設定</legend>
+    <div className="audio-dock">
       <button
-        className={soundEffectsEnabled ? "audio-btn active" : "audio-btn"}
-        title="効果音"
+        aria-expanded={isOpen}
+        aria-controls="audio-settings"
+        className={isOpen ? "audio-fab active" : "audio-fab"}
+        title="音の設定"
         type="button"
-        onClick={onToggleSoundEffects}
+        onClick={() => setIsOpen((open) => !open)}
       >
-        {soundEffectsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-        <span>SE</span>
+        <Music2 size={22} />
       </button>
-      <label className="audio-select-wrap">
-        <span>SE音</span>
-        <select
-          className="audio-select"
-          value={soundEffectPreset}
-          onChange={(event) =>
-            onChangeSoundEffectPreset(event.target.value as SoundEffectPresetId)
-          }
-        >
-          {SOUND_EFFECT_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        className={musicEnabled ? "audio-btn active" : "audio-btn"}
-        title="バックミュージック"
-        type="button"
-        onClick={onToggleMusic}
-      >
-        <Music2 size={18} />
-        <span>BGM</span>
-      </button>
-      <label className="audio-select-wrap">
-        <span>BGM曲</span>
-        <select
-          className="audio-select"
-          value={musicPreset}
-          onChange={(event) =>
-            onChangeMusicPreset(event.target.value as MusicPresetId)
-          }
-        >
-          {MUSIC_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    </fieldset>
+      {isOpen && (
+        <fieldset className="audio-panel" id="audio-settings">
+          <legend className="sr-only">音量設定</legend>
+          <div className="audio-row">
+            <span className="audio-label">BGM</span>
+            <button
+              className={musicEnabled ? "audio-btn active" : "audio-btn"}
+              title="BGM"
+              type="button"
+              onClick={onToggleMusic}
+            >
+              <Music2 size={18} />
+            </button>
+            <fieldset className="preset-buttons">
+              <legend className="sr-only">BGM切り替え</legend>
+              {MUSIC_PRESETS.map((preset) => (
+                <button
+                  aria-label={`BGM ${preset.label}`}
+                  className={
+                    musicPreset === preset.id
+                      ? "preset-btn active"
+                      : "preset-btn"
+                  }
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onChangeMusicPreset(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+          <div className="audio-row">
+            <span className="audio-label">SE</span>
+            <button
+              className={soundEffectsEnabled ? "audio-btn active" : "audio-btn"}
+              title="SE"
+              type="button"
+              onClick={onToggleSoundEffects}
+            >
+              {soundEffectsEnabled ? (
+                <Volume2 size={18} />
+              ) : (
+                <VolumeX size={18} />
+              )}
+            </button>
+            <fieldset className="preset-buttons">
+              <legend className="sr-only">SE切り替え</legend>
+              {SOUND_EFFECT_PRESETS.map((preset) => (
+                <button
+                  aria-label={`SE ${preset.label}`}
+                  className={
+                    soundEffectPreset === preset.id
+                      ? "preset-btn active"
+                      : "preset-btn"
+                  }
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onChangeSoundEffectPreset(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+        </fieldset>
+      )}
+    </div>
   );
 }
 

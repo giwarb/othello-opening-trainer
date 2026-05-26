@@ -45,32 +45,66 @@ button:disabled {
   min-height: 100vh;
 }
 
-.audio-controls {
+.audio-dock {
   position: fixed;
-  top: 12px;
-  right: 12px;
+  right: 18px;
+  bottom: 18px;
   z-index: 10;
+}
+
+.audio-fab {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  max-width: min(560px, calc(100vw - 24px));
-  padding: 6px;
-  background: rgb(255 250 240 / 88%);
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  color: #f7f3e8;
+  background: #17412f;
+  border: 1px solid #d8cfbd;
+  border-radius: 50%;
+  box-shadow: 0 12px 24px rgb(39 31 19 / 24%);
+}
+
+.audio-fab.active {
+  background: #bd8f36;
+  border-color: #bd8f36;
+}
+
+.audio-panel {
+  position: absolute;
+  right: 0;
+  bottom: 62px;
+  display: grid;
+  gap: 10px;
+  width: min(310px, calc(100vw - 36px));
+  padding: 12px;
+  background: rgb(255 250 240 / 94%);
   border: 1px solid #d8cfbd;
   border-radius: 8px;
-  box-shadow: 0 8px 18px rgb(39 31 19 / 14%);
+  box-shadow: 0 16px 32px rgb(39 31 19 / 20%);
   backdrop-filter: blur(8px);
+}
+
+.audio-row {
+  display: grid;
+  grid-template-columns: 40px 44px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-label {
+  color: #17412f;
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .audio-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 68px;
-  min-height: 34px;
-  padding: 7px 10px;
+  width: 38px;
+  height: 34px;
+  padding: 0;
   color: #17412f;
   background: #edf4e9;
   border: 1px solid #c7d8c0;
@@ -85,29 +119,36 @@ button:disabled {
   border-color: #17412f;
 }
 
-.audio-select-wrap {
-  display: inline-flex;
-  align-items: center;
+.preset-buttons {
+  display: flex;
   gap: 6px;
-  min-height: 34px;
-  padding: 4px 6px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.preset-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
   color: #17412f;
-  font-size: 0.72rem;
+  background: #fffaf0;
+  border: 1px solid rgb(23 65 47 / 32%);
+  border-radius: 50%;
+  font-size: 0.78rem;
   font-weight: 900;
 }
 
-.audio-select {
-  height: 28px;
-  max-width: 132px;
-  padding: 0 26px 0 8px;
-  border: 1px solid rgb(23 65 47 / 32%);
-  border-radius: 8px;
-  color: #17412f;
-  background: #fffaf0;
-  font: inherit;
+.preset-btn.active {
+  color: #fffaf0;
+  background: #bd8f36;
+  border-color: #bd8f36;
 }
 
-.audio-select:focus-visible {
+.audio-fab:focus-visible,
+.audio-btn:focus-visible,
+.preset-btn:focus-visible {
   outline: 3px solid rgb(189 143 54 / 34%);
   outline-offset: 2px;
 }

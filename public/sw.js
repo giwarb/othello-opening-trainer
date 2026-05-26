@@ -1,4 +1,4 @@
-const CACHE_NAME = "othello-opening-trainer-v5";
+const CACHE_NAME = "othello-opening-trainer-v6";
 const APP_SHELL = [
   "./",
   "./index.html",

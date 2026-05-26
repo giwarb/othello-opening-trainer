@@ -3,8 +3,8 @@ type GainNodePair = {
   output: GainNode;
 };
 
-export type MusicPresetId = "calm" | "rainy" | "woodland";
-export type SoundEffectPresetId = "soft" | "woodClick";
+export type MusicPresetId = "calm" | "rainy" | "woodland" | "sunny";
+export type SoundEffectPresetId = "soft" | "woodClick" | "crisp";
 
 export type AudioPreset<T extends string> = {
   id: T;
@@ -12,26 +12,38 @@ export type AudioPreset<T extends string> = {
 };
 
 export const MUSIC_PRESETS: AudioPreset<MusicPresetId>[] = [
-  { id: "calm", label: "静かな思考" },
-  { id: "rainy", label: "雨の日の盤面" },
-  { id: "woodland", label: "木漏れ日の研究" },
+  { id: "calm", label: "1" },
+  { id: "rainy", label: "2" },
+  { id: "woodland", label: "3" },
+  { id: "sunny", label: "4" },
 ];
 
 export const SOUND_EFFECT_PRESETS: AudioPreset<SoundEffectPresetId>[] = [
-  { id: "woodClick", label: "木駒パチッ" },
-  { id: "soft", label: "やわらかめ" },
+  { id: "crisp", label: "1" },
+  { id: "woodClick", label: "2" },
+  { id: "soft", label: "3" },
 ];
 
 const musicFiles: Record<MusicPresetId, string> = {
   calm: "./audio/calm-joseki-loop.wav",
   rainy: "./audio/rainy-board-loop.wav",
   woodland: "./audio/woodland-study-loop.wav",
+  sunny: "./audio/sunny-tesuji-loop.wav",
 };
 
-const sampleEffectFiles = {
-  place: "./audio/se-place-wood-click.wav",
-  flip: "./audio/se-flip-wood-click.wav",
-} as const;
+const sampleEffectFiles: Record<
+  Exclude<SoundEffectPresetId, "soft">,
+  { place: string; flip: string }
+> = {
+  crisp: {
+    place: "./audio/se-place-crisp-disc.wav",
+    flip: "./audio/se-flip-crisp-disc.wav",
+  },
+  woodClick: {
+    place: "./audio/se-place-wood-click.wav",
+    flip: "./audio/se-flip-wood-click.wav",
+  },
+};
 
 export class AudioEngine {
   private context: AudioContext | null = null;
@@ -45,7 +57,7 @@ export class AudioEngine {
   private musicEnabled = false;
   private seEnabled = true;
   private musicPreset: MusicPresetId = "calm";
-  private soundEffectPreset: SoundEffectPresetId = "woodClick";
+  private soundEffectPreset: SoundEffectPresetId = "crisp";
 
   setSoundEffectsEnabled(enabled: boolean) {
     this.seEnabled = enabled;
@@ -86,7 +98,7 @@ export class AudioEngine {
     const se = this.se;
     if (!context || !se) return;
 
-    if (this.soundEffectPreset === "woodClick") {
+    if (this.soundEffectPreset !== "soft") {
       await this.playSampleEffect("place", 0.72, 0);
       return;
     }
@@ -128,7 +140,7 @@ export class AudioEngine {
     if (!context || !se) return;
 
     const flips = Math.max(1, Math.min(count, 8));
-    if (this.soundEffectPreset === "woodClick") {
+    if (this.soundEffectPreset !== "soft") {
       for (let index = 0; index < flips; index += 1) {
         await this.playSampleEffect(
           "flip",
@@ -275,7 +287,7 @@ export class AudioEngine {
   }
 
   private async playSampleEffect(
-    kind: keyof typeof sampleEffectFiles,
+    kind: "place" | "flip",
     volume: number,
     delay: number,
     panValue = 0,
@@ -298,13 +310,17 @@ export class AudioEngine {
     source.start(start);
   }
 
-  private async loadEffectBuffer(kind: keyof typeof sampleEffectFiles) {
-    const loaded = this.effectBuffers.get(kind);
+  private async loadEffectBuffer(kind: "place" | "flip") {
+    if (this.soundEffectPreset === "soft") {
+      throw new Error("Soft preset does not use sampled effects");
+    }
+    const key = `${this.soundEffectPreset}:${kind}`;
+    const loaded = this.effectBuffers.get(key);
     if (loaded) return loaded;
-    const loading = this.effectLoading.get(kind);
+    const loading = this.effectLoading.get(key);
     if (loading) return loading;
     const context = this.getContext();
-    const promise = fetch(sampleEffectFiles[kind])
+    const promise = fetch(sampleEffectFiles[this.soundEffectPreset][kind])
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load SE: ${response.status}`);
@@ -313,10 +329,10 @@ export class AudioEngine {
       })
       .then((buffer) => context.decodeAudioData(buffer))
       .then((buffer) => {
-        this.effectBuffers.set(kind, buffer);
+        this.effectBuffers.set(key, buffer);
         return buffer;
       });
-    this.effectLoading.set(kind, promise);
+    this.effectLoading.set(key, promise);
     return promise;
   }
 
