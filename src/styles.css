@@ -51,7 +51,10 @@ button:disabled {
   right: 12px;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  max-width: min(560px, calc(100vw - 24px));
   padding: 6px;
   background: rgb(255 250 240 / 88%);
   border: 1px solid #d8cfbd;
@@ -80,6 +83,33 @@ button:disabled {
   color: #f7f3e8;
   background: #17412f;
   border-color: #17412f;
+}
+
+.audio-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 6px;
+  color: #17412f;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.audio-select {
+  height: 28px;
+  max-width: 132px;
+  padding: 0 26px 0 8px;
+  border: 1px solid rgb(23 65 47 / 32%);
+  border-radius: 8px;
+  color: #17412f;
+  background: #fffaf0;
+  font: inherit;
+}
+
+.audio-select:focus-visible {
+  outline: 3px solid rgb(189 143 54 / 34%);
+  outline-offset: 2px;
 }
 
 .control-band {

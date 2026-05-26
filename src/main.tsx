@@ -14,7 +14,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { JOSEKI_LIST, type Joseki } from "./data/joseki";
-import { AudioEngine } from "./domain/audio";
+import {
+  AudioEngine,
+  MUSIC_PRESETS,
+  type MusicPresetId,
+  SOUND_EFFECT_PRESETS,
+  type SoundEffectPresetId,
+} from "./domain/audio";
 import {
   type Board,
   type Cell,
@@ -69,10 +75,19 @@ function App() {
   const [musicEnabled, setMusicEnabled] = useState(() =>
     readBooleanSetting("othello_music_enabled", false),
   );
+  const [musicPreset, setMusicPreset] = useState<MusicPresetId>(() =>
+    readPresetSetting("othello_music_preset", MUSIC_PRESETS, "calm"),
+  );
+  const [soundEffectPreset, setSoundEffectPreset] =
+    useState<SoundEffectPresetId>(() =>
+      readPresetSetting("othello_se_preset", SOUND_EFFECT_PRESETS, "woodClick"),
+    );
 
   function getAudio() {
     audioRef.current ??= new AudioEngine();
+    audioRef.current.setSoundEffectPreset(soundEffectPreset);
     audioRef.current.setSoundEffectsEnabled(soundEffectsEnabled);
+    audioRef.current.setMusicPreset(musicPreset);
     audioRef.current.setMusicEnabled(musicEnabled);
     return audioRef.current;
   }
@@ -87,6 +102,13 @@ function App() {
     });
   }
 
+  function changeSoundEffectPreset(preset: SoundEffectPresetId) {
+    localStorage.setItem("othello_se_preset", preset);
+    setSoundEffectPreset(preset);
+    getAudio().setSoundEffectPreset(preset);
+    if (soundEffectsEnabled) void getAudio().playPlace();
+  }
+
   function toggleMusic() {
     setMusicEnabled((enabled) => {
       const next = !enabled;
@@ -96,15 +118,23 @@ function App() {
     });
   }
 
-  useEffect(() => {
-    audioRef.current ??= new AudioEngine();
-    audioRef.current.setSoundEffectsEnabled(soundEffectsEnabled);
-  }, [soundEffectsEnabled]);
+  function changeMusicPreset(preset: MusicPresetId) {
+    localStorage.setItem("othello_music_preset", preset);
+    setMusicPreset(preset);
+    getAudio().setMusicPreset(preset);
+  }
 
   useEffect(() => {
     audioRef.current ??= new AudioEngine();
+    audioRef.current.setSoundEffectPreset(soundEffectPreset);
+    audioRef.current.setSoundEffectsEnabled(soundEffectsEnabled);
+  }, [soundEffectsEnabled, soundEffectPreset]);
+
+  useEffect(() => {
+    audioRef.current ??= new AudioEngine();
+    audioRef.current.setMusicPreset(musicPreset);
     audioRef.current.setMusicEnabled(musicEnabled);
-  }, [musicEnabled]);
+  }, [musicEnabled, musicPreset]);
 
   function refreshRecords() {
     setRecords(getRecords());
@@ -281,7 +311,11 @@ function App() {
     <main className="app-shell">
       <AudioControls
         musicEnabled={musicEnabled}
+        musicPreset={musicPreset}
         soundEffectsEnabled={soundEffectsEnabled}
+        soundEffectPreset={soundEffectPreset}
+        onChangeMusicPreset={changeMusicPreset}
+        onChangeSoundEffectPreset={changeSoundEffectPreset}
         onToggleMusic={toggleMusic}
         onToggleSoundEffects={toggleSoundEffects}
       />
@@ -321,12 +355,20 @@ function App() {
 
 function AudioControls({
   musicEnabled,
+  musicPreset,
   soundEffectsEnabled,
+  soundEffectPreset,
+  onChangeMusicPreset,
+  onChangeSoundEffectPreset,
   onToggleMusic,
   onToggleSoundEffects,
 }: {
   musicEnabled: boolean;
+  musicPreset: MusicPresetId;
   soundEffectsEnabled: boolean;
+  soundEffectPreset: SoundEffectPresetId;
+  onChangeMusicPreset: (preset: MusicPresetId) => void;
+  onChangeSoundEffectPreset: (preset: SoundEffectPresetId) => void;
   onToggleMusic: () => void;
   onToggleSoundEffects: () => void;
 }) {
@@ -342,6 +384,22 @@ function AudioControls({
         {soundEffectsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
         <span>SE</span>
       </button>
+      <label className="audio-select-wrap">
+        <span>SE音</span>
+        <select
+          className="audio-select"
+          value={soundEffectPreset}
+          onChange={(event) =>
+            onChangeSoundEffectPreset(event.target.value as SoundEffectPresetId)
+          }
+        >
+          {SOUND_EFFECT_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         className={musicEnabled ? "audio-btn active" : "audio-btn"}
         title="バックミュージック"
@@ -351,6 +409,22 @@ function AudioControls({
         <Music2 size={18} />
         <span>BGM</span>
       </button>
+      <label className="audio-select-wrap">
+        <span>BGM曲</span>
+        <select
+          className="audio-select"
+          value={musicPreset}
+          onChange={(event) =>
+            onChangeMusicPreset(event.target.value as MusicPresetId)
+          }
+        >
+          {MUSIC_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+      </label>
     </fieldset>
   );
 }
@@ -869,6 +943,16 @@ function readBooleanSetting(key: string, fallback: boolean) {
   const value = localStorage.getItem(key);
   if (value === null) return fallback;
   return value === "true";
+}
+
+function readPresetSetting<T extends string>(
+  key: string,
+  presets: { id: T }[],
+  fallback: T,
+) {
+  const value = localStorage.getItem(key);
+  if (presets.some((preset) => preset.id === value)) return value as T;
+  return fallback;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3,15 +3,49 @@ type GainNodePair = {
   output: GainNode;
 };
 
+export type MusicPresetId = "calm" | "rainy" | "woodland";
+export type SoundEffectPresetId = "soft" | "woodClick";
+
+export type AudioPreset<T extends string> = {
+  id: T;
+  label: string;
+};
+
+export const MUSIC_PRESETS: AudioPreset<MusicPresetId>[] = [
+  { id: "calm", label: "静かな思考" },
+  { id: "rainy", label: "雨の日の盤面" },
+  { id: "woodland", label: "木漏れ日の研究" },
+];
+
+export const SOUND_EFFECT_PRESETS: AudioPreset<SoundEffectPresetId>[] = [
+  { id: "woodClick", label: "木駒パチッ" },
+  { id: "soft", label: "やわらかめ" },
+];
+
+const musicFiles: Record<MusicPresetId, string> = {
+  calm: "./audio/calm-joseki-loop.wav",
+  rainy: "./audio/rainy-board-loop.wav",
+  woodland: "./audio/woodland-study-loop.wav",
+};
+
+const sampleEffectFiles = {
+  place: "./audio/se-place-wood-click.wav",
+  flip: "./audio/se-flip-wood-click.wav",
+} as const;
+
 export class AudioEngine {
   private context: AudioContext | null = null;
   private se: GainNodePair | null = null;
   private music: GainNodePair | null = null;
-  private musicBuffer: AudioBuffer | null = null;
+  private musicBuffers = new Map<MusicPresetId, AudioBuffer>();
   private musicSource: AudioBufferSourceNode | null = null;
-  private musicLoading: Promise<AudioBuffer> | null = null;
+  private musicLoading = new Map<MusicPresetId, Promise<AudioBuffer>>();
+  private effectBuffers = new Map<string, AudioBuffer>();
+  private effectLoading = new Map<string, Promise<AudioBuffer>>();
   private musicEnabled = false;
   private seEnabled = true;
+  private musicPreset: MusicPresetId = "calm";
+  private soundEffectPreset: SoundEffectPresetId = "woodClick";
 
   setSoundEffectsEnabled(enabled: boolean) {
     this.seEnabled = enabled;
@@ -24,6 +58,10 @@ export class AudioEngine {
     }
   }
 
+  setSoundEffectPreset(preset: SoundEffectPresetId) {
+    this.soundEffectPreset = preset;
+  }
+
   setMusicEnabled(enabled: boolean) {
     this.musicEnabled = enabled;
     if (!enabled) {
@@ -33,12 +71,25 @@ export class AudioEngine {
     void this.ensureStarted().then(() => this.startMusic());
   }
 
+  setMusicPreset(preset: MusicPresetId) {
+    if (this.musicPreset === preset) return;
+    this.musicPreset = preset;
+    if (!this.musicEnabled) return;
+    this.stopMusic();
+    void this.ensureStarted().then(() => this.startMusic());
+  }
+
   async playPlace() {
     if (!this.seEnabled) return;
     await this.ensureStarted();
     const context = this.context;
     const se = this.se;
     if (!context || !se) return;
+
+    if (this.soundEffectPreset === "woodClick") {
+      await this.playSampleEffect("place", 0.72, 0);
+      return;
+    }
 
     const now = context.currentTime;
     const thump = context.createOscillator();
@@ -77,6 +128,18 @@ export class AudioEngine {
     if (!context || !se) return;
 
     const flips = Math.max(1, Math.min(count, 8));
+    if (this.soundEffectPreset === "woodClick") {
+      for (let index = 0; index < flips; index += 1) {
+        await this.playSampleEffect(
+          "flip",
+          Math.max(0.24, 0.5 - index * 0.026),
+          index * 0.035,
+          index % 2 === 0 ? -0.16 : 0.16,
+        );
+      }
+      return;
+    }
+
     for (let index = 0; index < flips; index += 1) {
       const start = context.currentTime + index * 0.035;
       const osc = context.createOscillator();
@@ -147,7 +210,7 @@ export class AudioEngine {
     const music = this.music;
     if (!music) return;
 
-    const buffer = await this.loadMusicBuffer();
+    const buffer = await this.loadMusicBuffer(this.musicPreset);
     if (!this.musicEnabled || this.musicSource) return;
 
     const now = context.currentTime;
@@ -189,11 +252,13 @@ export class AudioEngine {
     }
   }
 
-  private async loadMusicBuffer() {
-    if (this.musicBuffer) return this.musicBuffer;
-    if (this.musicLoading) return this.musicLoading;
+  private async loadMusicBuffer(preset: MusicPresetId) {
+    const loaded = this.musicBuffers.get(preset);
+    if (loaded) return loaded;
+    const loading = this.musicLoading.get(preset);
+    if (loading) return loading;
     const context = this.getContext();
-    this.musicLoading = fetch("./audio/calm-joseki-loop.wav")
+    const promise = fetch(musicFiles[preset])
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to load BGM: ${response.status}`);
@@ -202,10 +267,57 @@ export class AudioEngine {
       })
       .then((buffer) => context.decodeAudioData(buffer))
       .then((buffer) => {
-        this.musicBuffer = buffer;
+        this.musicBuffers.set(preset, buffer);
         return buffer;
       });
-    return this.musicLoading;
+    this.musicLoading.set(preset, promise);
+    return promise;
+  }
+
+  private async playSampleEffect(
+    kind: keyof typeof sampleEffectFiles,
+    volume: number,
+    delay: number,
+    panValue = 0,
+  ) {
+    const context = this.getContext();
+    const se = this.se;
+    if (!se) return;
+    const buffer = await this.loadEffectBuffer(kind);
+    const start = context.currentTime + delay;
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    const pan = context.createStereoPanner();
+
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(pan);
+    pan.connect(se.input);
+    gain.gain.setValueAtTime(volume, start);
+    pan.pan.setValueAtTime(panValue, start);
+    source.start(start);
+  }
+
+  private async loadEffectBuffer(kind: keyof typeof sampleEffectFiles) {
+    const loaded = this.effectBuffers.get(kind);
+    if (loaded) return loaded;
+    const loading = this.effectLoading.get(kind);
+    if (loading) return loading;
+    const context = this.getContext();
+    const promise = fetch(sampleEffectFiles[kind])
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load SE: ${response.status}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then((buffer) => context.decodeAudioData(buffer))
+      .then((buffer) => {
+        this.effectBuffers.set(kind, buffer);
+        return buffer;
+      });
+    this.effectLoading.set(kind, promise);
+    return promise;
   }
 
   private createNoiseBurst() {
