@@ -7,7 +7,9 @@ export class AudioEngine {
   private context: AudioContext | null = null;
   private se: GainNodePair | null = null;
   private music: GainNodePair | null = null;
-  private musicNodes: AudioNode[] = [];
+  private musicBuffer: AudioBuffer | null = null;
+  private musicSource: AudioBufferSourceNode | null = null;
+  private musicLoading: Promise<AudioBuffer> | null = null;
   private musicEnabled = false;
   private seEnabled = true;
 
@@ -139,73 +141,32 @@ export class AudioEngine {
     return context;
   }
 
-  private startMusic() {
-    if (!this.musicEnabled || this.musicNodes.length > 0) return;
+  private async startMusic() {
+    if (!this.musicEnabled || this.musicSource) return;
     const context = this.getContext();
     const music = this.music;
     if (!music) return;
 
+    const buffer = await this.loadMusicBuffer();
+    if (!this.musicEnabled || this.musicSource) return;
+
     const now = context.currentTime;
-    const compressor = context.createDynamicsCompressor();
+    const source = context.createBufferSource();
     const filter = context.createBiquadFilter();
-    const delay = context.createDelay();
-    const delayGain = context.createGain();
-    const dryGain = context.createGain();
-    const lfo = context.createOscillator();
-    const lfoGain = context.createGain();
-
+    const compressor = context.createDynamicsCompressor();
+    source.buffer = buffer;
+    source.loop = true;
     filter.type = "lowpass";
-    filter.frequency.value = 980;
-    filter.Q.value = 0.7;
-    delay.delayTime.value = 0.42;
-    delayGain.gain.value = 0.16;
-    dryGain.gain.value = 0.55;
-    lfo.type = "sine";
-    lfo.frequency.value = 0.045;
-    lfoGain.gain.value = 130;
-    lfo.connect(lfoGain);
-    lfoGain.connect(filter.frequency);
-
-    filter.connect(dryGain);
-    filter.connect(delay);
-    delay.connect(delayGain);
-    delayGain.connect(delay);
-    dryGain.connect(compressor);
-    delayGain.connect(compressor);
+    filter.frequency.value = 4200;
+    filter.Q.value = 0.45;
+    source.connect(filter);
+    filter.connect(compressor);
     compressor.connect(music.input);
-
-    const notes = [196, 246.94, 293.66, 369.99, 440];
-    const nodes: AudioNode[] = [
-      compressor,
-      filter,
-      delay,
-      delayGain,
-      dryGain,
-      lfo,
-      lfoGain,
-    ];
-
-    for (const [index, frequency] of notes.entries()) {
-      const osc = context.createOscillator();
-      const gain = context.createGain();
-      const pan = context.createStereoPanner();
-      osc.type = index % 2 === 0 ? "sine" : "triangle";
-      osc.frequency.value = frequency;
-      osc.detune.value = (index - 2) * 3;
-      gain.gain.value = 0.045;
-      pan.pan.value = (index - 2) * 0.18;
-      osc.connect(gain);
-      gain.connect(pan);
-      pan.connect(filter);
-      osc.start(now + index * 0.03);
-      nodes.push(osc, gain, pan);
-    }
-
     music.output.gain.cancelScheduledValues(now);
     music.output.gain.setValueAtTime(0.0001, now);
-    music.output.gain.exponentialRampToValueAtTime(0.34, now + 1.5);
-    lfo.start(now);
-    this.musicNodes = nodes;
+    music.output.gain.exponentialRampToValueAtTime(0.42, now + 1.2);
+    source.start(now);
+    this.musicSource = source;
   }
 
   private stopMusic() {
@@ -215,18 +176,36 @@ export class AudioEngine {
     const now = context.currentTime;
     music.output.gain.cancelScheduledValues(now);
     music.output.gain.setTargetAtTime(0.0001, now, 0.4);
-    for (const node of this.musicNodes) {
-      if ("stop" in node) {
-        window.setTimeout(() => {
-          try {
-            (node as OscillatorNode | AudioBufferSourceNode).stop();
-          } catch {
-            // Already stopped.
-          }
-        }, 700);
-      }
+    const source = this.musicSource;
+    this.musicSource = null;
+    if (source) {
+      window.setTimeout(() => {
+        try {
+          source.stop();
+        } catch {
+          // Already stopped.
+        }
+      }, 700);
     }
-    this.musicNodes = [];
+  }
+
+  private async loadMusicBuffer() {
+    if (this.musicBuffer) return this.musicBuffer;
+    if (this.musicLoading) return this.musicLoading;
+    const context = this.getContext();
+    this.musicLoading = fetch("./audio/calm-joseki-loop.wav")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load BGM: ${response.status}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then((buffer) => context.decodeAudioData(buffer))
+      .then((buffer) => {
+        this.musicBuffer = buffer;
+        return buffer;
+      });
+    return this.musicLoading;
   }
 
   private createNoiseBurst() {
