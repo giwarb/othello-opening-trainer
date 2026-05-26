@@ -158,7 +158,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "brightwell",
     name: "ブライトウェル対応",
     color: "white",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e3", "f6", "e6"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e3", "f6"],
     explanation: {
       aim: "黒が白の使いたかったe3を先に取ってきた形です。白はf6で中央近くに石を置き、黒だけが楽に広がらないようにします。",
       followUp: [
@@ -172,7 +172,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "leaders_tiger",
     name: "Leader's Tiger対応",
     color: "white",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e6", "b3", "c6"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "e6", "b3"],
     explanation: {
       aim: "黒がe6に来て、いつものローズビルとは違う形にしてきます。白はb3で左側に手を作り、黒が中央を大きく使いすぎないようにします。",
       followUp: [
@@ -328,7 +328,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "missile",
     name: "ミサイル対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "g5", "c6", "e3"],
+    moves: ["f5", "d6", "c3", "g5", "c6"],
     explanation: {
       aim: "白がg5に飛び出してきた形です。黒はc6で反対側に手を作り、白の飛び出しにそのまま付き合いすぎないようにします。",
       followUp: [
@@ -342,7 +342,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "torake",
     name: "虎系犬素対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "f3", "d3", "f4"],
+    moves: ["f5", "d6", "c3", "f3", "d3"],
     explanation: {
       aim: "白がf3に来て、虎の本線から少しずらしてきた形です。黒はd3で中央に戻り、c4へ進んで形を整えます。",
       followUp: [
@@ -356,7 +356,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "yes_ryu",
     name: "イエス流対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "d3", "c4", "b3", "c6", "f4"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "b3", "c6"],
     explanation: {
       aim: "白がb3に来て、左側から形を変えてきます。黒はc6で下側にも道を作り、c5で中央に近い足場を作ります。",
       followUp: [
@@ -398,7 +398,7 @@ export const JOSEKI_LIST: Joseki[] = [
     id: "mako_tora",
     name: "まこ虎対応",
     color: "black",
-    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "c5", "b5", "b4", "f6"],
+    moves: ["f5", "d6", "c3", "d3", "c4", "f4", "c5", "b5", "b4"],
     explanation: {
       aim: "白がb5に来て、ローズビル本線から外してきた形です。黒はc6で左下に足場を作り、e3で中央にも戻る道を作ります。",
       followUp: [

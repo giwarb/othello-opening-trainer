@@ -1,16 +1,20 @@
 ﻿import {
   ArrowLeft,
   CheckCircle2,
+  Music2,
   RefreshCw,
   Shuffle,
   TrendingDown,
   Undo2,
+  Volume2,
+  VolumeX,
   XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { JOSEKI_LIST, type Joseki } from "./data/joseki";
+import { AudioEngine } from "./domain/audio";
 import {
   type Board,
   type Cell,
@@ -27,6 +31,7 @@ import {
   type JosekiRecord,
   type JosekiStats,
 } from "./domain/storage";
+import { buildStrategyPlan } from "./domain/strategy";
 import {
   playComputerMove,
   playPlayerMove,
@@ -57,6 +62,49 @@ function App() {
   const [resultHadMistake, setResultHadMistake] = useState(false);
   const stateRef = useRef<TrainerState | null>(null);
   const sessionHasMistake = useRef(false);
+  const audioRef = useRef<AudioEngine | null>(null);
+  const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(() =>
+    readBooleanSetting("othello_se_enabled", true),
+  );
+  const [musicEnabled, setMusicEnabled] = useState(() =>
+    readBooleanSetting("othello_music_enabled", false),
+  );
+
+  function getAudio() {
+    audioRef.current ??= new AudioEngine();
+    audioRef.current.setSoundEffectsEnabled(soundEffectsEnabled);
+    audioRef.current.setMusicEnabled(musicEnabled);
+    return audioRef.current;
+  }
+
+  function toggleSoundEffects() {
+    setSoundEffectsEnabled((enabled) => {
+      const next = !enabled;
+      localStorage.setItem("othello_se_enabled", String(next));
+      getAudio().setSoundEffectsEnabled(next);
+      if (next) void getAudio().playPlace();
+      return next;
+    });
+  }
+
+  function toggleMusic() {
+    setMusicEnabled((enabled) => {
+      const next = !enabled;
+      localStorage.setItem("othello_music_enabled", String(next));
+      getAudio().setMusicEnabled(next);
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    audioRef.current ??= new AudioEngine();
+    audioRef.current.setSoundEffectsEnabled(soundEffectsEnabled);
+  }, [soundEffectsEnabled]);
+
+  useEffect(() => {
+    audioRef.current ??= new AudioEngine();
+    audioRef.current.setMusicEnabled(musicEnabled);
+  }, [musicEnabled]);
 
   function refreshRecords() {
     setRecords(getRecords());
@@ -174,6 +222,7 @@ function App() {
     const color = colorForPly(base.moves.length);
     const flips = getFlips(base.board, move, color);
 
+    await getAudio().playPlace();
     commitState({
       ...base,
       board: boardWithCell(base.board, move, color),
@@ -192,6 +241,7 @@ function App() {
         : `相手が ${move} を着手`;
 
     commitState({ ...finalState, message: msgOverride });
+    await getAudio().playFlip(flips.length);
     setAnimatingCells({ placed: new Set(), flipped: new Set(flips) });
     await sleep(440);
     setAnimatingCells({ placed: new Set(), flipped: new Set() });
@@ -229,6 +279,12 @@ function App() {
 
   return (
     <main className="app-shell">
+      <AudioControls
+        musicEnabled={musicEnabled}
+        soundEffectsEnabled={soundEffectsEnabled}
+        onToggleMusic={toggleMusic}
+        onToggleSoundEffects={toggleSoundEffects}
+      />
       {phase === "home" && (
         <HomeScreen
           stats={stats}
@@ -260,6 +316,42 @@ function App() {
         />
       )}
     </main>
+  );
+}
+
+function AudioControls({
+  musicEnabled,
+  soundEffectsEnabled,
+  onToggleMusic,
+  onToggleSoundEffects,
+}: {
+  musicEnabled: boolean;
+  soundEffectsEnabled: boolean;
+  onToggleMusic: () => void;
+  onToggleSoundEffects: () => void;
+}) {
+  return (
+    <fieldset className="audio-controls">
+      <legend className="sr-only">音量設定</legend>
+      <button
+        className={soundEffectsEnabled ? "audio-btn active" : "audio-btn"}
+        title="効果音"
+        type="button"
+        onClick={onToggleSoundEffects}
+      >
+        {soundEffectsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+        <span>SE</span>
+      </button>
+      <button
+        className={musicEnabled ? "audio-btn active" : "audio-btn"}
+        title="バックミュージック"
+        type="button"
+        onClick={onToggleMusic}
+      >
+        <Music2 size={18} />
+        <span>BGM</span>
+      </button>
+    </fieldset>
   );
 }
 
@@ -602,6 +694,26 @@ function BoardView({
   );
 }
 
+function StaticBoard({ board }: { board: Board }) {
+  return (
+    <div className="board-wrap">
+      <div className="board">
+        {board.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const coord = pointToCoord(rowIndex, colIndex);
+            return (
+              <span className="square static-square" key={coord}>
+                <span className="coord">{coord}</span>
+                {cell ? <span className={`stone ${cell}`} /> : null}
+              </span>
+            );
+          }),
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ResultScreen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -620,6 +732,8 @@ function ResultScreen({
     ? "完走しましたが失敗がありました"
     : resultMessage(state.joseki);
   const counts = discCounts(state.board);
+  const strategyPlan = buildStrategyPlan(state.board, state.joseki);
+  const strategyCounts = discCounts(strategyPlan.board);
 
   return (
     <div className="result-screen">
@@ -651,9 +765,36 @@ function ResultScreen({
               onPlay={() => undefined}
             />
           </section>
+          <section className="result-board-section" aria-label="この先の狙い図">
+            <div className="result-section-head">
+              <span>この先の狙い図</span>
+              <div className="score result-score">
+                <span className="disc black" />
+                {strategyCounts.black}
+                <span className="disc white" />
+                {strategyCounts.white}
+              </div>
+            </div>
+            <StaticBoard board={strategyPlan.board} />
+            <div className="plan-strip">
+              {strategyPlan.moves.map((move, index) => (
+                <span
+                  key={`${move.color}-${move.move}-${index}`}
+                  className={
+                    move.color === "black" ? "black-move" : "white-move"
+                  }
+                >
+                  {move.color === "black" ? "黒" : "白"}
+                  {move.move}
+                </span>
+              ))}
+            </div>
+          </section>
           <section className="result-explanation">
             <span className="result-section-headline">この定石の狙い</span>
             <p>{state.joseki.explanation.aim}</p>
+            <span className="result-section-headline">図の見方</span>
+            <p>{strategyPlan.note}</p>
             <span className="result-section-headline">
               この後に意識すること
             </span>
@@ -722,6 +863,12 @@ function boardWithCell(board: Board, move: string, cell: Cell): Board {
   const row = Number(move.slice(1)) - 1;
   next[row][col] = cell;
   return next;
+}
+
+function readBooleanSetting(key: string, fallback: boolean) {
+  const value = localStorage.getItem(key);
+  if (value === null) return fallback;
+  return value === "true";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

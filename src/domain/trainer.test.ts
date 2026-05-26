@@ -17,8 +17,16 @@ describe("trainer", () => {
     expect(JOSEKI_LIST.every((j) => j.moves[0] === "f5")).toBe(true);
   });
 
-  it("all joseki have at least six moves", () => {
-    expect(JOSEKI_LIST.every((j) => j.moves.length >= 6)).toBe(true);
+  it("all joseki have enough moves to practice a shape", () => {
+    expect(JOSEKI_LIST.every((j) => j.moves.length >= 5)).toBe(true);
+  });
+
+  it("all joseki end on the player's own move", () => {
+    const wrongEnds = JOSEKI_LIST.filter(
+      (j) => colorForPly(j.moves.length - 1) !== j.color,
+    ).map((j) => `${j.id}: ${j.moves.join(" ")}`);
+
+    expect(wrongEnds).toEqual([]);
   });
 
   it("all joseki lines are legal Othello move sequences", () => {
