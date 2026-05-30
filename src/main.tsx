@@ -76,11 +76,15 @@ function App() {
     readBooleanSetting("othello_music_enabled", false),
   );
   const [musicPreset, setMusicPreset] = useState<MusicPresetId>(() =>
-    readPresetSetting("othello_music_preset", MUSIC_PRESETS, "calm"),
+    readPresetSetting("othello_music_preset", MUSIC_PRESETS, "canCan"),
   );
   const [soundEffectPreset, setSoundEffectPreset] =
     useState<SoundEffectPresetId>(() =>
-      readPresetSetting("othello_se_preset", SOUND_EFFECT_PRESETS, "crisp"),
+      readPresetSetting(
+        "othello_se_preset",
+        SOUND_EFFECT_PRESETS,
+        "boardPiece",
+      ),
     );
 
   function getAudio() {

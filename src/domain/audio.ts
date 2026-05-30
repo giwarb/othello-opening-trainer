@@ -3,8 +3,8 @@ type GainNodePair = {
   output: GainNode;
 };
 
-export type MusicPresetId = "calm" | "rainy" | "woodland" | "sunny";
-export type SoundEffectPresetId = "soft" | "woodClick" | "crisp";
+export type MusicPresetId = "canCan" | "rondoAllaTurka";
+export type SoundEffectPresetId = "boardPiece" | "woodBlock" | "soft";
 
 export type AudioPreset<T extends string> = {
   id: T;
@@ -12,36 +12,32 @@ export type AudioPreset<T extends string> = {
 };
 
 export const MUSIC_PRESETS: AudioPreset<MusicPresetId>[] = [
-  { id: "calm", label: "1" },
-  { id: "rainy", label: "2" },
-  { id: "woodland", label: "3" },
-  { id: "sunny", label: "4" },
+  { id: "canCan", label: "1" },
+  { id: "rondoAllaTurka", label: "2" },
 ];
 
 export const SOUND_EFFECT_PRESETS: AudioPreset<SoundEffectPresetId>[] = [
-  { id: "crisp", label: "1" },
-  { id: "woodClick", label: "2" },
+  { id: "boardPiece", label: "1" },
+  { id: "woodBlock", label: "2" },
   { id: "soft", label: "3" },
 ];
 
 const musicFiles: Record<MusicPresetId, string> = {
-  calm: "./audio/calm-joseki-loop.wav",
-  rainy: "./audio/rainy-board-loop.wav",
-  woodland: "./audio/woodland-study-loop.wav",
-  sunny: "./audio/sunny-tesuji-loop.wav",
+  canCan: "./audio/offenbach-can-can-public-domain.ogg",
+  rondoAllaTurka: "./audio/rondo-alla-turka-public-domain.mp3",
 };
 
 const sampleEffectFiles: Record<
   Exclude<SoundEffectPresetId, "soft">,
   { place: string; flip: string }
 > = {
-  crisp: {
-    place: "./audio/se-place-crisp-disc.wav",
-    flip: "./audio/se-flip-crisp-disc.wav",
+  boardPiece: {
+    place: "./audio/board-start-freesound-cc0.mp3",
+    flip: "./audio/click-131-freesound-cc0.mp3",
   },
-  woodClick: {
-    place: "./audio/se-place-wood-click.wav",
-    flip: "./audio/se-flip-wood-click.wav",
+  woodBlock: {
+    place: "./audio/wood-block-sting-freesound-cc0.mp3",
+    flip: "./audio/click-131-freesound-cc0.mp3",
   },
 };
 
@@ -56,8 +52,8 @@ export class AudioEngine {
   private effectLoading = new Map<string, Promise<AudioBuffer>>();
   private musicEnabled = false;
   private seEnabled = true;
-  private musicPreset: MusicPresetId = "calm";
-  private soundEffectPreset: SoundEffectPresetId = "crisp";
+  private musicPreset: MusicPresetId = "canCan";
+  private soundEffectPreset: SoundEffectPresetId = "boardPiece";
 
   setSoundEffectsEnabled(enabled: boolean) {
     this.seEnabled = enabled;
